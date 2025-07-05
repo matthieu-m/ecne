@@ -1,0 +1,32 @@
+[package]
+name = "ecne"
+version = "0.1.0"
+authors = ["Matthieu M. <matthieum.147192@gmail.com>"]
+edition = "2024"
+description = "Index-keyed sets & maps"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/matthieu-m/ecne"
+readme = "README.md"
+keywords = ["no-std", "index", "collections"]
+categories = ["no-std", "data-structures"]
+
+[features]
+
+default = []
+
+#   Enables "nightly" features.
+nightly = []
+
+#   Enables "alloc" feature, which allows depending on collections, and in particular BTreeSet.
+alloc = []
+
+#   Enables "std" feature, which allows depending on collections, and in particular FxHashSet.
+std = [ "alloc" ]
+
+#   Enables "serde" feature, which makes a number of types Serializable and Deserializable.
+serde = [ "dep:serde" ]
+
+[dependencies]
+
+#   Only with "serde" feature.
+serde = { version = "1.0.218", features = ["derive"], optional = true }
