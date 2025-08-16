@@ -103,9 +103,7 @@ mod btree_set {
         fn nth_after(&self, n: usize, current: Self::Index) -> Result<Self::Index, NonZeroUsize> {
             let mut iterator = self.range(forward_range(current));
 
-            if let Some(n) = n.checked_sub(1) {
-                iterator.advance_by(n).map_err(|err| err.saturating_add(1))?;
-            }
+            iterator.advance_by(n).map_err(|err| err.saturating_add(1))?;
 
             iterator.next().copied().ok_or(NonZeroUsize::MIN)
         }
@@ -116,7 +114,9 @@ mod btree_set {
             F: FnMut(B, Self::Index) -> R,
             R: Try<Output = B>,
         {
-            self.range(forward_range(current)).copied().try_fold(accumulator, f)
+            self.range((Bound::Included(current), Bound::Unbounded))
+                .copied()
+                .try_fold(accumulator, f)
         }
     }
 
@@ -139,9 +139,7 @@ mod btree_set {
         fn nth_before(&self, n: usize, current: Self::Index) -> Result<Self::Index, NonZeroUsize> {
             let mut iterator = self.range(backward_range(current));
 
-            if let Some(n) = n.checked_sub(1) {
-                iterator.advance_back_by(n).map_err(|err| err.saturating_add(1))?;
-            }
+            iterator.advance_back_by(n).map_err(|err| err.saturating_add(1))?;
 
             iterator.next_back().copied().ok_or(NonZeroUsize::MIN)
         }
@@ -152,7 +150,9 @@ mod btree_set {
             F: FnMut(B, Self::Index) -> R,
             R: Try<Output = B>,
         {
-            self.range(backward_range(current)).copied().try_rfold(accumulator, f)
+            self.range((Bound::Unbounded, Bound::Included(current)))
+                .copied()
+                .try_rfold(accumulator, f)
         }
     }
 
@@ -168,6 +168,38 @@ mod btree_set {
     fn forward_range<I>(current: I) -> (Bound<I>, Bound<I>) {
         (Bound::Excluded(current), Bound::Unbounded)
     }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::test::IndexTester;
+
+        use super::*;
+
+        struct Tester;
+
+        impl IndexTester for Tester {
+            type Index = u8;
+            type Victim = BTreeSet<u8>;
+
+            fn upper_bound() -> u8 {
+                u8::MAX
+            }
+
+            fn victim(indexes: &[u8]) -> Self::Victim {
+                indexes.iter().copied().collect()
+            }
+
+            fn index(i: u8) -> Self::Index {
+                i
+            }
+        }
+
+        crate::test_index_view!(Tester);
+        crate::test_index_collection!(Tester);
+        crate::test_index_store!(Tester);
+        crate::test_index_forward!(Tester);
+        crate::test_index_backward!(Tester);
+    } // mod tests
 } // mod btree_set
 
 #[cfg(any(feature = "std", test))]
@@ -258,4 +290,34 @@ mod hash_set {
         S: Default + BuildHasher,
     {
     }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::test::IndexTester;
+
+        use super::*;
+
+        struct Tester;
+
+        impl IndexTester for Tester {
+            type Index = u8;
+            type Victim = HashSet<u8>;
+
+            fn upper_bound() -> u8 {
+                u8::MAX
+            }
+
+            fn victim(indexes: &[u8]) -> Self::Victim {
+                indexes.iter().copied().collect()
+            }
+
+            fn index(i: u8) -> Self::Index {
+                i
+            }
+        }
+
+        crate::test_index_view!(Tester);
+        crate::test_index_collection!(Tester);
+        crate::test_index_store!(Tester);
+    } // mod tests
 } // mod hash_set

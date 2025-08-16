@@ -10,7 +10,7 @@ use crate::{
 
 /// Simple implementation of `IndexChunk` for integrals.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub struct UnsignedChunk<I>(I);
+pub struct UnsignedChunk<I>(pub I);
 
 impl<I> BitAnd for UnsignedChunk<I>
 where
@@ -206,11 +206,7 @@ macro_rules! impl_indexes_chunk_for_chunk {
             fn first(&self) -> Option<Self::Index> {
                 let zeros = self.0.trailing_zeros();
 
-                if zeros == $u::BITS {
-                    return None;
-                }
-
-                Some(zeros as u8)
+                (zeros < $u::BITS).then_some(zeros as u8)
             }
 
             fn next_after(&self, index: Self::Index) -> Option<Self::Index> {
@@ -235,11 +231,7 @@ macro_rules! impl_indexes_chunk_for_chunk {
             fn last(&self) -> Option<Self::Index> {
                 let zeros = self.0.leading_zeros();
 
-                if zeros == $u::BITS {
-                    return None;
-                }
-
-                Some(zeros as u8)
+                $u::BITS.checked_sub(zeros + 1).map(|n| n as u8)
             }
 
             fn next_before(&self, index: Self::Index) -> Option<Self::Index> {
@@ -259,3 +251,37 @@ macro_rules! impl_indexes_chunk_for_chunk {
 }
 
 impl_indexes_chunk_for_chunk!(u8 u16 u32 u64 u128 usize);
+
+#[cfg(test)]
+mod tests {
+    macro_rules! test_unsigned_chunk {
+        ($($u:ident)*) => { $(
+            mod $u {
+                use crate::chunk::UnsignedChunk;
+
+                struct Tester;
+
+                impl crate::test::IndexTester for Tester {
+                    type Index = u8;
+                    type Victim = UnsignedChunk<$u>;
+
+                    fn upper_bound() -> u8 { 7 }
+
+                    fn victim(indexes: &[u8]) -> Self::Victim {
+                        UnsignedChunk(indexes.iter().fold(0, |acc, i| acc | (1 << (*i as u32))))
+                    }
+
+                    fn index(i: u8) -> Self::Index { i }
+                }
+
+                crate::test_index_view!(Tester);
+                crate::test_index_collection!(Tester);
+                crate::test_index_store!(Tester);
+                crate::test_index_forward!(Tester);
+                crate::test_index_backward!(Tester);
+            }
+       )* };
+    }
+
+    test_unsigned_chunk!(u8 u16 u32 u64 u128 usize);
+} // mod tests

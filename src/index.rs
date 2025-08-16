@@ -1,6 +1,6 @@
 //! A collection of traits for index-based vaults.
 
-use core::{num::NonZeroUsize, ops::Bound};
+use core::{fmt, num::NonZeroUsize, ops::Bound};
 
 #[cfg(feature = "nightly")]
 use core::ops::Try;
@@ -55,7 +55,7 @@ pub trait IndexCollection: IndexView {
 /// -   NoPhantom: the store will only ever return indexes that have been inserted and have not been removed since.
 pub unsafe trait IndexStore: IndexView {
     /// Error on insertion.
-    type InsertionError;
+    type InsertionError: fmt::Debug;
 
     /// Removes all the indexes from the store.
     fn clear(&mut self);
@@ -75,7 +75,7 @@ pub unsafe trait IndexStore: IndexView {
 ///
 /// -   NoTheft: the vault SHALL never return that it does not contain an index if the index was inserted, and was not
 ///     removed since.
-pub unsafe trait IndexVault: IndexStore {}
+pub unsafe trait IndexVault: IndexView {}
 
 /// An iterable view of the indexes in the store.
 ///
@@ -121,18 +121,22 @@ pub unsafe trait IndexForward: IndexView {
     ///
     /// Try to implement this method if internal iteration can be optimized.
     #[cfg(feature = "nightly")]
-    fn try_fold_after<B, F, R>(&self, current: Self::Index, mut accumulator: B, mut f: F) -> R
+    fn try_fold_after<B, F, R>(&self, mut current: Self::Index, mut accumulator: B, mut f: F) -> R
     where
         F: FnMut(B, Self::Index) -> R,
         R: Try<Output = B>,
     {
         accumulator = f(accumulator, current)?;
 
-        while let Some(current) = self.next_after(current) {
+        loop {
+            let Some(n) = self.next_after(current) else {
+                return R::from_output(accumulator);
+            };
+
+            current = n;
+
             accumulator = f(accumulator, current)?;
         }
-
-        R::from_output(accumulator)
     }
 }
 
@@ -173,18 +177,22 @@ pub unsafe trait IndexBackward: IndexForward {
     ///
     /// Try to implement this method if internal iteration can be optimized.
     #[cfg(feature = "nightly")]
-    fn try_fold_before<B, F, R>(&self, current: Self::Index, mut accumulator: B, mut f: F) -> R
+    fn try_fold_before<B, F, R>(&self, mut current: Self::Index, mut accumulator: B, mut f: F) -> R
     where
         F: FnMut(B, Self::Index) -> R,
         R: Try<Output = B>,
     {
         accumulator = f(accumulator, current)?;
 
-        while let Some(current) = self.next_before(current) {
+        loop {
+            let Some(n) = self.next_before(current) else {
+                return R::from_output(accumulator);
+            };
+
+            current = n;
+
             accumulator = f(accumulator, current)?;
         }
-
-        R::from_output(accumulator)
     }
 }
 

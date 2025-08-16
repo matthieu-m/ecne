@@ -26,6 +26,9 @@ pub mod index;
 pub mod set;
 pub mod vault;
 
+#[cfg(test)]
+pub mod test;
+
 /// Never type.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[cfg(not(feature = "nightly"))]

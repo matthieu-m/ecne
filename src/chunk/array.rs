@@ -12,7 +12,7 @@ use crate::{
 
 /// Simple implementation of `IndexChunk` for arrays of chunks.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct ArrayChunk<C, const N: usize>([C; N]);
+pub struct ArrayChunk<C, const N: usize>(pub [C; N]);
 
 impl<C, const N: usize> ArrayChunk<C, N>
 where
@@ -289,7 +289,7 @@ where
             .0
             .iter()
             .enumerate()
-            .skip(outer)
+            .skip(outer + 1)
             .find_map(|(i, c)| c.first().map(|r| (i, r)))?;
 
         Some(Self::fuse(outer, inner))
@@ -321,12 +321,14 @@ where
             return Some(Self::fuse(outer, inner));
         }
 
+        let limit = outer.min(self.0.len());
+
         let (outer, inner) = self
             .0
+            .get(..limit)?
             .iter()
             .enumerate()
             .rev()
-            .skip(outer)
             .find_map(|(i, c)| c.last().map(|r| (i, r)))?;
 
         Some(Self::fuse(outer, inner))
@@ -430,3 +432,41 @@ where
         (outer, inner as u8)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{chunk::UnsignedChunk, test::IndexTester};
+
+    use super::*;
+
+    struct Tester;
+
+    impl IndexTester for Tester {
+        type Index = u16;
+        type Victim = ArrayChunk<UnsignedChunk<u8>, 4>;
+
+        fn upper_bound() -> u8 {
+            8 * 4 - 1
+        }
+
+        fn victim(indexes: &[u8]) -> Self::Victim {
+            let mut array: Self::Victim = ArrayChunk::new();
+
+            for &index in indexes {
+                let _ = array.insert(index.into());
+            }
+
+            array
+        }
+
+        fn index(i: u8) -> Self::Index {
+            i.into()
+        }
+    }
+
+    crate::test_index_view!(Tester);
+    crate::test_index_collection!(Tester);
+    crate::test_index_store!(Tester);
+    crate::test_index_forward!(Tester);
+    crate::test_index_backward!(Tester);
+} // mod tests
