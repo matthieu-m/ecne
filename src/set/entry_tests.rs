@@ -69,7 +69,7 @@ mod index_set {
         let mut victim = primes.clone();
 
         {
-            let occupied = victim.entry(IN).insert();
+            let occupied = victim.entry(IN).insert().unwrap();
 
             assert_eq!(IN, occupied.get());
         }
@@ -77,7 +77,7 @@ mod index_set {
         assert_eq!(primes.as_store(), victim.as_store());
 
         {
-            let occupied = victim.entry(OUT).insert();
+            let occupied = victim.entry(OUT).insert().unwrap();
 
             assert_eq!(OUT, occupied.get());
         }
@@ -95,11 +95,11 @@ mod index_set {
 
         let mut victim = primes.clone();
 
-        victim.entry(IN).or_insert();
+        victim.entry(IN).or_insert().unwrap();
 
         assert_eq!(primes.as_store(), victim.as_store());
 
-        victim.entry(OUT).or_insert();
+        victim.entry(OUT).or_insert().unwrap();
 
         assert!(primes.as_store().iter().all(|index| victim.as_store().contains(index)));
         assert!(victim.as_store().contains(&OUT));
@@ -113,7 +113,7 @@ mod index_set {
 
         let mut victim = primes.clone();
 
-        assert_eq!(IN, victim.entry(IN).insert().get());
+        assert_eq!(IN, victim.entry(IN).insert().unwrap().get());
 
         assert_eq!(primes.as_store(), victim.as_store());
     }
@@ -126,7 +126,7 @@ mod index_set {
 
         let mut victim = primes.clone();
 
-        assert_eq!(NEW, victim.entry(NEW).insert().remove());
+        assert_eq!(NEW, victim.entry(NEW).insert().unwrap().remove());
 
         assert_eq!(primes.as_store(), victim.as_store());
     }
@@ -182,7 +182,7 @@ mod index_set {
                 unreachable!()
             };
 
-            vacant.insert();
+            vacant.insert().unwrap();
         }
 
         assert!(primes.as_store().iter().all(|index| victim.as_store().contains(index)));
@@ -259,7 +259,7 @@ mod index_ord_set {
         let mut victim = primes.clone();
 
         {
-            let occupied = victim.entry(IN).insert();
+            let occupied = victim.entry(IN).insert().unwrap();
 
             assert_eq!(IN, occupied.get());
         }
@@ -267,7 +267,7 @@ mod index_ord_set {
         assert_eq!(primes.as_store(), victim.as_store());
 
         {
-            let occupied = victim.entry(OUT).insert();
+            let occupied = victim.entry(OUT).insert().unwrap();
 
             assert_eq!(OUT, occupied.get());
         }
@@ -285,11 +285,11 @@ mod index_ord_set {
 
         let mut victim = primes.clone();
 
-        victim.entry(IN).or_insert();
+        victim.entry(IN).or_insert().unwrap();
 
         assert_eq!(primes.as_store(), victim.as_store());
 
-        victim.entry(OUT).or_insert();
+        victim.entry(OUT).or_insert().unwrap();
 
         assert!(primes.as_store().iter().all(|index| victim.as_store().contains(index)));
         assert!(victim.as_store().contains(&OUT));
@@ -303,7 +303,7 @@ mod index_ord_set {
 
         let mut victim = primes.clone();
 
-        assert_eq!(IN, victim.entry(IN).insert().get());
+        assert_eq!(IN, victim.entry(IN).insert().unwrap().get());
 
         assert_eq!(primes.as_store(), victim.as_store());
     }
@@ -316,7 +316,7 @@ mod index_ord_set {
 
         let mut victim = primes.clone();
 
-        assert_eq!(NEW, victim.entry(NEW).insert().remove());
+        assert_eq!(NEW, victim.entry(NEW).insert().unwrap().remove());
 
         assert_eq!(primes.as_store(), victim.as_store());
     }
@@ -372,7 +372,7 @@ mod index_ord_set {
                 unreachable!()
             };
 
-            vacant.insert();
+            vacant.insert().unwrap();
         }
 
         assert!(primes.as_store().iter().all(|index| victim.as_store().contains(index)));

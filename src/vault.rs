@@ -9,10 +9,26 @@ mod btree_set {
 
     use alloc::collections::BTreeSet;
 
-    use crate::index::{IndexBackward, IndexCollection, IndexForward, IndexOrdered, IndexStore, IndexVault};
+    use crate::{
+        Never,
+        index::{IndexBackward, IndexCollection, IndexForward, IndexOrdered, IndexStore, IndexVault},
+    };
 
-    impl<I> IndexCollection for BTreeSet<I> {
-        fn with_capacity(_n: usize) -> Self {
+    impl<I> IndexCollection for BTreeSet<I>
+    where
+        I: Copy + Eq + Ord,
+    {
+        type Index = I;
+
+        fn span() -> (Bound<Self::Index>, Bound<Self::Index>) {
+            (Bound::Unbounded, Bound::Unbounded)
+        }
+
+        fn new() -> Self {
+            Self::new()
+        }
+
+        fn with_span(_range: (Bound<Self::Index>, Bound<Self::Index>)) -> Self {
             Self::new()
         }
 
@@ -21,10 +37,6 @@ mod btree_set {
         }
 
         fn len(&self) -> usize {
-            self.len()
-        }
-
-        fn capacity(&self) -> usize {
             self.len()
         }
 
@@ -40,14 +52,14 @@ mod btree_set {
     where
         I: Copy + Eq + Ord,
     {
-        type Index = I;
+        type InsertionError = Never;
 
         fn contains(&self, index: Self::Index) -> bool {
             self.contains(&index)
         }
 
-        fn insert(&mut self, index: Self::Index) -> bool {
-            self.insert(index)
+        fn insert(&mut self, index: Self::Index) -> Result<bool, Never> {
+            Ok(self.insert(index))
         }
 
         fn remove(&mut self, index: Self::Index) -> bool {
@@ -152,18 +164,35 @@ mod btree_set {
 
 #[cfg(any(feature = "std", test))]
 mod hash_set {
-    use core::hash::{BuildHasher, Hash};
+    use core::{
+        hash::{BuildHasher, Hash},
+        ops::Bound,
+    };
 
     use std::collections::HashSet;
 
-    use crate::index::{IndexCollection, IndexStore, IndexVault};
+    use crate::{
+        Never,
+        index::{IndexCollection, IndexStore, IndexVault},
+    };
 
     impl<I, S> IndexCollection for HashSet<I, S>
     where
+        I: Copy + Eq + Ord,
         S: Default,
     {
-        fn with_capacity(n: usize) -> Self {
-            Self::with_capacity_and_hasher(n, S::default())
+        type Index = I;
+
+        fn span() -> (Bound<Self::Index>, Bound<Self::Index>) {
+            (Bound::Unbounded, Bound::Unbounded)
+        }
+
+        fn new() -> Self {
+            Self::with_hasher(S::default())
+        }
+
+        fn with_span(_range: (Bound<Self::Index>, Bound<Self::Index>)) -> Self {
+            Self::new()
         }
 
         fn is_empty(&self) -> bool {
@@ -172,10 +201,6 @@ mod hash_set {
 
         fn len(&self) -> usize {
             self.len()
-        }
-
-        fn capacity(&self) -> usize {
-            self.capacity()
         }
 
         fn clear(&mut self) {
@@ -191,14 +216,14 @@ mod hash_set {
         I: Copy + Eq + Hash + Ord,
         S: Default + BuildHasher,
     {
-        type Index = I;
+        type InsertionError = Never;
 
         fn contains(&self, index: Self::Index) -> bool {
             self.contains(&index)
         }
 
-        fn insert(&mut self, index: Self::Index) -> bool {
-            self.insert(index)
+        fn insert(&mut self, index: Self::Index) -> Result<bool, Self::InsertionError> {
+            Ok(self.insert(index))
         }
 
         fn remove(&mut self, index: Self::Index) -> bool {

@@ -6,13 +6,16 @@
 use core::{
     cmp::{self, Ordering},
     iter::FusedIterator,
-    ops,
+    ops::{self, Bound},
 };
 
 #[cfg(feature = "nightly")]
 use core::ops::Try;
 
-use crate::index::{IndexBackward, IndexCollection, IndexForward, IndexOrdered, IndexStore};
+use crate::{
+    Never,
+    index::{IndexBackward, IndexCollection, IndexForward, IndexOrdered, IndexStore},
+};
 
 /// A set of indexes.
 #[derive(Clone, Copy, Debug)]
@@ -34,19 +37,26 @@ impl<S> IndexSet<S>
 where
     S: IndexCollection,
 {
+    /// Returns the span of index values which MAY be inserted.
+    ///
+    /// Attempts to insert values outside this span WILL fail, possibly via panicking or aborting.
+    #[inline(always)]
+    pub fn span() -> (Bound<S::Index>, Bound<S::Index>) {
+        S::span()
+    }
+
     /// Creates a new, empty, instance.
     #[inline(always)]
     pub fn new() -> Self {
-        Self::with_capacity(0)
+        Self::with_store(S::new())
     }
 
-    /// Creates a new, empty, instance, with appropriate capacity for storing up to `n` indexes if possible.
+    /// Creates a new, empty, instance, with appropriate capacity for storing the span if possible.
     ///
-    /// This is purely a _best effort_ method, as not all collections allow reserving extra space, and some may have a
-    /// a maximum capacity that is below `n` anyway.
+    /// This is purely a _best effort_ method, as not all collections allow reserving extra space.
     #[inline(always)]
-    pub fn with_capacity(n: usize) -> Self {
-        Self::with_store(S::with_capacity(n))
+    pub fn with_span(range: (Bound<S::Index>, Bound<S::Index>)) -> Self {
+        Self::with_store(S::with_span(range))
     }
 
     /// Creates a new instance from the original store.
@@ -60,10 +70,18 @@ impl<S> IndexOrdSet<S>
 where
     S: IndexOrdered,
 {
+    /// Returns the span of index values which MAY be inserted.
+    ///
+    /// Attempts to insert values outside this span WILL fail, possibly via panicking or aborting.
+    #[inline(always)]
+    pub fn span() -> (Bound<S::Index>, Bound<S::Index>) {
+        S::span()
+    }
+
     /// Creates a new, empty, instance.
     #[inline(always)]
     pub fn new() -> Self {
-        Self::with_capacity(0)
+        Self::with_store(S::new())
     }
 
     /// Creates a new, empty, instance, with appropriate capacity for storing up to `n` indexes if possible.
@@ -71,8 +89,8 @@ where
     /// This is purely a _best effort_ method, as not all collections allow reserving extra space, and some may have a
     /// a maximum capacity that is below `n` anyway.
     #[inline(always)]
-    pub fn with_capacity(n: usize) -> Self {
-        Self::with_store(S::with_capacity(n))
+    pub fn with_span(range: (Bound<S::Index>, Bound<S::Index>)) -> Self {
+        Self::with_store(S::with_span(range))
     }
 
     /// Creates a new instance from the original store.
@@ -102,17 +120,13 @@ where
 
 impl<A, S> FromIterator<A> for IndexSet<S>
 where
-    S: IndexStore<Index = A>,
+    S: IndexStore<Index = A, InsertionError = Never>,
 {
     fn from_iter<I>(iter: I) -> Self
     where
         I: IntoIterator<Item = A>,
     {
-        let iter = iter.into_iter();
-
-        let minimum = iter.size_hint().0;
-
-        let mut this = Self::with_capacity(minimum);
+        let mut this = Self::new();
 
         this.extend(iter);
 
@@ -122,17 +136,13 @@ where
 
 impl<A, S> FromIterator<A> for IndexOrdSet<S>
 where
-    S: IndexOrdered<Index = A>,
+    S: IndexOrdered<Index = A, InsertionError = Never>,
 {
     fn from_iter<I>(iter: I) -> Self
     where
         I: IntoIterator<Item = A>,
     {
-        let iter = iter.into_iter();
-
-        let minimum = iter.size_hint().0;
-
-        let mut this = Self::with_capacity(minimum);
+        let mut this = Self::new();
 
         this.extend(iter);
 
@@ -199,13 +209,6 @@ where
         self.store.len()
     }
 
-    /// Returns the capacity of the set.
-    ///
-    /// The capacity may be lower than actually requested.
-    pub fn capacity(&self) -> usize {
-        self.store.capacity()
-    }
-
     /// Removes all indexes from the set.
     pub fn clear(&mut self) {
         self.store.clear()
@@ -224,13 +227,6 @@ where
     /// Returns the number of indexes in the set.
     pub fn len(&self) -> usize {
         self.store.len()
-    }
-
-    /// Returns the capacity of the set.
-    ///
-    /// The capacity may be lower than actually requested.
-    pub fn capacity(&self) -> usize {
-        self.store.capacity()
     }
 
     /// Removes all indexes from the set.
@@ -256,7 +252,7 @@ where
     }
 
     /// Inserts the index in the set, returns whether it is newly inserted.
-    pub fn insert(&mut self, index: S::Index) -> bool {
+    pub fn insert(&mut self, index: S::Index) -> Result<bool, S::InsertionError> {
         self.store.insert(index)
     }
 
@@ -276,7 +272,7 @@ where
     }
 
     /// Inserts the index in the set, returns whether it is newly inserted.
-    pub fn insert(&mut self, index: S::Index) -> bool {
+    pub fn insert(&mut self, index: S::Index) -> Result<bool, S::InsertionError> {
         self.store.insert(index)
     }
 
@@ -288,39 +284,39 @@ where
 
 impl<A, S> Extend<A> for IndexSet<S>
 where
-    S: IndexStore<Index = A>,
+    S: IndexStore<Index = A, InsertionError = Never>,
 {
     fn extend<I>(&mut self, iter: I)
     where
         I: IntoIterator<Item = A>,
     {
         for index in iter {
-            self.insert(index);
+            let _ = self.insert(index);
         }
     }
 
     #[cfg(feature = "nightly")]
     fn extend_one(&mut self, index: A) {
-        self.insert(index);
+        let _ = self.insert(index);
     }
 }
 
 impl<A, S> Extend<A> for IndexOrdSet<S>
 where
-    S: IndexStore<Index = A>,
+    S: IndexStore<Index = A, InsertionError = Never>,
 {
     fn extend<I>(&mut self, iter: I)
     where
         I: IntoIterator<Item = A>,
     {
         for index in iter {
-            self.insert(index);
+            let _ = self.insert(index);
         }
     }
 
     #[cfg(feature = "nightly")]
     fn extend_one(&mut self, index: A) {
-        self.insert(index);
+        let _ = self.insert(index);
     }
 }
 
@@ -466,24 +462,26 @@ where
     }
 
     /// Inserts the index, and returns an `OccupiedEntry`.
-    pub fn insert(self) -> OccupiedEntry<'a, I, S> {
+    pub fn insert(self) -> Result<OccupiedEntry<'a, I, S>, S::InsertionError> {
         match self {
-            Self::Occupied(o) => o,
+            Self::Occupied(o) => Ok(o),
             Self::Vacant(VacantEntry { index, store }) => {
-                let _inserted = store.insert(index);
+                let _inserted = store.insert(index)?;
 
                 debug_assert!(_inserted);
 
-                OccupiedEntry { index, store }
+                Ok(OccupiedEntry { index, store })
             }
         }
     }
 
     /// Ensures the index is in the set.
-    pub fn or_insert(self) {
+    pub fn or_insert(self) -> Result<(), S::InsertionError> {
         if let Self::Vacant(v) = self {
-            v.insert();
+            v.insert()?;
         }
+
+        Ok(())
     }
 }
 
@@ -535,10 +533,12 @@ where
     }
 
     /// Inserts the index in the store.
-    pub fn insert(self) {
-        let _inserted = self.store.insert(self.index);
+    pub fn insert(self) -> Result<(), S::InsertionError> {
+        let _inserted = self.store.insert(self.index)?;
 
         debug_assert!(_inserted);
+
+        Ok(())
     }
 }
 
@@ -1833,10 +1833,11 @@ where
     /// Inserts all indexes of `other` not contained in `self`.
     pub fn bitor_assign<OS>(&mut self, other: &IndexSet<OS>)
     where
+        S: IndexStore<InsertionError = Never>,
         OS: IndexForward<Index = S::Index>,
     {
         other.iter().for_each(|index| {
-            self.store.insert(index);
+            let _ = self.store.insert(index);
         });
     }
 
@@ -1866,10 +1867,11 @@ where
     /// Inserts all indexes of `other` not contained in `self`.
     pub fn bitor_assign<OS>(&mut self, other: &IndexOrdSet<OS>)
     where
+        S: IndexStore<InsertionError = Never>,
         OS: IndexForward<Index = S::Index>,
     {
         other.iter().for_each(|index| {
-            self.store.insert(index);
+            let _ = self.store.insert(index);
         });
     }
 
@@ -1887,6 +1889,7 @@ where
     /// `other`.
     pub fn bitxor_assign<OS>(&mut self, other: &IndexOrdSet<OS>)
     where
+        S: IndexStore<InsertionError = Never>,
         OS: IndexOrdered<Index = S::Index>,
     {
         let mut next_self = self.store.first();
@@ -1897,7 +1900,7 @@ where
                 (_, None) => break,
                 (None, Some(_)) => {
                     while let Some(that) = next_other {
-                        self.store.insert(that);
+                        let _ = self.store.insert(that);
 
                         next_other = other.store.next_after(that);
                     }
@@ -1915,7 +1918,7 @@ where
                         next_self = self.store.next_after(this);
                     }
                     Ordering::Greater => {
-                        self.store.insert(that);
+                        let _ = self.store.insert(that);
 
                         next_other = other.store.next_after(that);
                     }
@@ -1956,7 +1959,7 @@ where
 
 impl<S, OS> ops::BitOrAssign<IndexSet<OS>> for IndexSet<S>
 where
-    S: IndexStore,
+    S: IndexStore<InsertionError = Never>,
     OS: IndexForward<Index = S::Index>,
 {
     fn bitor_assign(&mut self, other: IndexSet<OS>) {
@@ -1966,7 +1969,7 @@ where
 
 impl<S, OS> ops::BitOrAssign<&IndexSet<OS>> for IndexSet<S>
 where
-    S: IndexStore,
+    S: IndexStore<InsertionError = Never>,
     OS: IndexForward<Index = S::Index>,
 {
     fn bitor_assign(&mut self, other: &IndexSet<OS>) {
@@ -2024,7 +2027,7 @@ where
 
 impl<S, OS> ops::BitOr<IndexSet<OS>> for IndexSet<S>
 where
-    S: IndexStore,
+    S: IndexStore<InsertionError = Never>,
     OS: IndexForward<Index = S::Index>,
 {
     type Output = Self;
@@ -2038,7 +2041,7 @@ where
 
 impl<S, OS> ops::BitOr<&IndexSet<OS>> for IndexSet<S>
 where
-    S: IndexStore,
+    S: IndexStore<InsertionError = Never>,
     OS: IndexForward<Index = S::Index>,
 {
     type Output = Self;
@@ -2104,7 +2107,7 @@ where
 
 impl<S, OS> ops::BitOrAssign<IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered<InsertionError = Never>,
     OS: IndexForward<Index = S::Index>,
 {
     fn bitor_assign(&mut self, other: IndexOrdSet<OS>) {
@@ -2114,7 +2117,7 @@ where
 
 impl<S, OS> ops::BitOrAssign<&IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered<InsertionError = Never>,
     OS: IndexForward<Index = S::Index>,
 {
     fn bitor_assign(&mut self, other: &IndexOrdSet<OS>) {
@@ -2124,7 +2127,7 @@ where
 
 impl<S, OS> ops::BitXorAssign<IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered<InsertionError = Never>,
     OS: IndexOrdered<Index = S::Index>,
 {
     fn bitxor_assign(&mut self, other: IndexOrdSet<OS>) {
@@ -2134,7 +2137,7 @@ where
 
 impl<S, OS> ops::BitXorAssign<&IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered<InsertionError = Never>,
     OS: IndexOrdered<Index = S::Index>,
 {
     fn bitxor_assign(&mut self, other: &IndexOrdSet<OS>) {
@@ -2192,7 +2195,7 @@ where
 
 impl<S, OS> ops::BitOr<IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered<InsertionError = Never>,
     OS: IndexForward<Index = S::Index>,
 {
     type Output = Self;
@@ -2206,7 +2209,7 @@ where
 
 impl<S, OS> ops::BitOr<&IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered<InsertionError = Never>,
     OS: IndexForward<Index = S::Index>,
 {
     type Output = Self;
@@ -2248,7 +2251,7 @@ where
 
 impl<S, OS> ops::BitXor<IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered<InsertionError = Never>,
     OS: IndexOrdered<Index = S::Index>,
 {
     type Output = Self;
@@ -2262,7 +2265,7 @@ where
 
 impl<S, OS> ops::BitXor<&IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered<InsertionError = Never>,
     OS: IndexOrdered<Index = S::Index>,
 {
     type Output = Self;

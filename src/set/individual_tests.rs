@@ -36,9 +36,9 @@ mod index_set {
         for _ in 0..3 {
             assert!(!victim.contains(INDEX));
 
-            assert!(victim.insert(INDEX));
-            assert!(!victim.insert(INDEX));
-            assert!(!victim.insert(INDEX));
+            assert!(victim.insert(INDEX).unwrap());
+            assert!(!victim.insert(INDEX).unwrap());
+            assert!(!victim.insert(INDEX).unwrap());
 
             assert!(victim.remove(INDEX));
             assert!(!victim.remove(INDEX));
@@ -114,9 +114,9 @@ mod index_ord_set {
         for _ in 0..3 {
             assert!(!victim.contains(INDEX));
 
-            assert!(victim.insert(INDEX));
-            assert!(!victim.insert(INDEX));
-            assert!(!victim.insert(INDEX));
+            assert!(victim.insert(INDEX).unwrap());
+            assert!(!victim.insert(INDEX).unwrap());
+            assert!(!victim.insert(INDEX).unwrap());
 
             assert!(victim.remove(INDEX));
             assert!(!victim.remove(INDEX));

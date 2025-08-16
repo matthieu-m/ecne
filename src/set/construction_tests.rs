@@ -13,18 +13,6 @@ mod index_set {
 
         assert!(victim.is_empty());
         assert_eq!(0, victim.len());
-        assert_eq!(0, victim.capacity());
-    }
-
-    #[test]
-    fn with_capacity() {
-        const CAPACITY: usize = 42;
-
-        let victim = Victim::with_capacity(CAPACITY);
-
-        assert!(victim.is_empty());
-        assert_eq!(0, victim.len());
-        assert!(CAPACITY < victim.capacity(), "{CAPACITY} < {}", victim.capacity());
     }
 
     #[test]
@@ -33,7 +21,6 @@ mod index_set {
 
         assert!(victim.is_empty());
         assert_eq!(0, victim.len());
-        assert_eq!(0, victim.capacity());
     }
 
     #[test]
@@ -46,7 +33,6 @@ mod index_set {
 
             assert!(victim.is_empty());
             assert_eq!(0, victim.len());
-            assert_eq!(0, victim.capacity());
         }
 
         {
@@ -54,12 +40,6 @@ mod index_set {
 
             assert!(!victim.is_empty());
             assert_eq!(SOME.len(), victim.len());
-            assert!(
-                SOME.len() <= victim.capacity(),
-                "{} > {}",
-                SOME.len(),
-                victim.capacity()
-            );
         }
     }
 } // index_set
@@ -77,18 +57,6 @@ mod index_ord_set {
 
         assert!(victim.is_empty());
         assert_eq!(0, victim.len());
-        assert_eq!(0, victim.capacity());
-    }
-
-    #[test]
-    fn with_capacity() {
-        const CAPACITY: usize = 42;
-
-        let victim = Victim::with_capacity(CAPACITY);
-
-        assert!(victim.is_empty());
-        assert_eq!(0, victim.len());
-        assert_eq!(0, victim.capacity());
     }
 
     #[test]
@@ -97,7 +65,6 @@ mod index_ord_set {
 
         assert!(victim.is_empty());
         assert_eq!(0, victim.len());
-        assert_eq!(0, victim.capacity());
     }
 
     #[test]
@@ -110,7 +77,6 @@ mod index_ord_set {
 
             assert!(victim.is_empty());
             assert_eq!(0, victim.len());
-            assert_eq!(0, victim.capacity());
         }
 
         {
@@ -118,12 +84,6 @@ mod index_ord_set {
 
             assert!(!victim.is_empty());
             assert_eq!(SOME.len(), victim.len());
-            assert!(
-                SOME.len() <= victim.capacity(),
-                "{} > {}",
-                SOME.len(),
-                victim.capacity()
-            );
         }
     }
 } // index_ord_set
