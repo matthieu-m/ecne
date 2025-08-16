@@ -14,7 +14,7 @@ use core::ops::Try;
 
 use crate::{
     Never,
-    index::{IndexBackward, IndexCollection, IndexForward, IndexOrdered, IndexStore},
+    index::{IndexBackward, IndexCollection, IndexForward, IndexOrdered, IndexStore, IndexView},
 };
 
 /// A set of indexes.
@@ -68,7 +68,7 @@ where
 
 impl<S> IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexCollection + IndexOrdered,
 {
     /// Returns the span of index values which MAY be inserted.
     ///
@@ -111,7 +111,7 @@ where
 
 impl<S> Default for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexCollection + IndexOrdered,
 {
     fn default() -> Self {
         Self::new()
@@ -120,7 +120,7 @@ where
 
 impl<A, S> FromIterator<A> for IndexSet<S>
 where
-    S: IndexStore<Index = A, InsertionError = Never>,
+    S: IndexCollection<Index = A> + IndexStore<Index = A, InsertionError = Never>,
 {
     fn from_iter<I>(iter: I) -> Self
     where
@@ -136,7 +136,7 @@ where
 
 impl<A, S> FromIterator<A> for IndexOrdSet<S>
 where
-    S: IndexOrdered<Index = A, InsertionError = Never>,
+    S: IndexCollection<Index = A> + IndexOrdered<Index = A> + IndexStore<Index = A, InsertionError = Never>,
 {
     fn from_iter<I>(iter: I) -> Self
     where
@@ -192,12 +192,12 @@ impl<S> IndexOrdSet<S> {
 }
 
 //
-//  Overall operations.
+//  View Operations.
 //
 
 impl<S> IndexSet<S>
 where
-    S: IndexCollection,
+    S: IndexView,
 {
     /// Returns whether the set is empty, or not.
     pub fn is_empty(&self) -> bool {
@@ -209,15 +209,15 @@ where
         self.store.len()
     }
 
-    /// Removes all indexes from the set.
-    pub fn clear(&mut self) {
-        self.store.clear()
+    /// Returns whether the index is contained in the set.
+    pub fn contains(&self, index: S::Index) -> bool {
+        self.store.contains(index)
     }
 }
 
 impl<S> IndexOrdSet<S>
 where
-    S: IndexCollection,
+    S: IndexView,
 {
     /// Returns whether the set is empty, or not.
     pub fn is_empty(&self) -> bool {
@@ -229,26 +229,26 @@ where
         self.store.len()
     }
 
-    /// Removes all indexes from the set.
-    pub fn clear(&mut self) {
-        self.store.clear()
+    /// Returns whether the index is contained in the set.
+    pub fn contains(&self, index: S::Index) -> bool {
+        self.store.contains(index)
     }
 }
 
 #[cfg(test)]
-mod overall_tests;
+mod view_tests;
 
 //
-//  Individual operations.
+//  Store operations.
 //
 
 impl<S> IndexSet<S>
 where
     S: IndexStore,
 {
-    /// Returns whether the index is contained in the set.
-    pub fn contains(&self, index: S::Index) -> bool {
-        self.store.contains(index)
+    /// Removes all indexes from the set.
+    pub fn clear(&mut self) {
+        self.store.clear()
     }
 
     /// Inserts the index in the set, returns whether it is newly inserted.
@@ -266,9 +266,9 @@ impl<S> IndexOrdSet<S>
 where
     S: IndexStore,
 {
-    /// Returns whether the index is contained in the set.
-    pub fn contains(&self, index: S::Index) -> bool {
-        self.store.contains(index)
+    /// Removes all indexes from the set.
+    pub fn clear(&mut self) {
+        self.store.clear()
     }
 
     /// Inserts the index in the set, returns whether it is newly inserted.
@@ -321,7 +321,7 @@ where
 }
 
 #[cfg(test)]
-mod individual_tests;
+mod store_tests;
 
 //
 //  Inclusion operations.
@@ -334,7 +334,7 @@ where
     /// Returns whether `self` and `other` are disjoint, ie do not have any index in common.
     pub fn is_disjoint<OS>(&self, other: &IndexSet<OS>) -> bool
     where
-        OS: IndexStore<Index = S::Index>,
+        OS: IndexView<Index = S::Index>,
     {
         self.iter().all(|index| !other.contains(index))
     }
@@ -344,7 +344,7 @@ where
     /// If `self` is a subset of `other`, then `other` is a superset of `self`, and vice-versa.
     pub fn is_subset<OS>(&self, other: &IndexSet<OS>) -> bool
     where
-        OS: IndexStore<Index = S::Index>,
+        OS: IndexView<Index = S::Index>,
     {
         self.iter().all(|index| other.contains(index))
     }
@@ -367,7 +367,7 @@ where
     /// Returns whether `self` and `other` are disjoint, ie do not have any index in common.
     pub fn is_disjoint<OS>(&self, other: &IndexOrdSet<OS>) -> bool
     where
-        OS: IndexStore<Index = S::Index>,
+        OS: IndexView<Index = S::Index>,
     {
         self.iter().all(|index| !other.contains(index))
     }
@@ -377,7 +377,7 @@ where
     /// If `self` is a subset of `other`, then `other` is a superset of `self`, and vice-versa.
     pub fn is_subset<OS>(&self, other: &IndexOrdSet<OS>) -> bool
     where
-        OS: IndexStore<Index = S::Index>,
+        OS: IndexView<Index = S::Index>,
     {
         self.iter().all(|index| other.contains(index))
     }
@@ -1068,7 +1068,7 @@ mod basic_iteration_tests;
 
 impl<S> IndexSet<S>
 where
-    S: IndexForward,
+    S: IndexForward + IndexStore,
 {
     /// Clears the set, returning all elements as an iterator.
     pub fn drain(&mut self) -> Drain<'_, S::Index, S> {
@@ -1110,7 +1110,7 @@ where
 
 impl<S> IndexOrdSet<S>
 where
-    S: IndexForward,
+    S: IndexForward + IndexStore,
 {
     /// Clears the set, returning all elements as an iterator.
     pub fn drain(&mut self) -> Drain<'_, S::Index, S> {
@@ -1153,7 +1153,7 @@ where
 /// A draining iterator over the items of an `IndexSet`.
 pub struct Drain<'a, I, S>
 where
-    S: IndexCollection,
+    S: IndexStore,
 {
     next: Option<I>,
     yielded: usize,
@@ -1162,7 +1162,7 @@ where
 
 impl<'a, I, S> Drop for Drain<'a, I, S>
 where
-    S: IndexCollection,
+    S: IndexStore,
 {
     fn drop(&mut self) {
         self.store.clear();
@@ -1172,7 +1172,7 @@ where
 impl<'a, I, S> Iterator for Drain<'a, I, S>
 where
     I: Copy,
-    S: IndexForward<Index = I>,
+    S: IndexForward<Index = I> + IndexStore<Index = I>,
 {
     type Item = S::Index;
 
@@ -1217,7 +1217,7 @@ where
 impl<'a, I, S> ExactSizeIterator for Drain<'a, I, S>
 where
     I: Copy,
-    S: IndexForward<Index = I>,
+    S: IndexForward<Index = I> + IndexStore<Index = I>,
 {
     fn len(&self) -> usize {
         self.store.len() - self.yielded
@@ -1232,7 +1232,7 @@ where
 impl<'a, I, S> FusedIterator for Drain<'a, I, S>
 where
     I: Copy,
-    S: IndexForward<Index = I>,
+    S: IndexForward<Index = I> + IndexStore<Index = I>,
 {
 }
 
@@ -1247,7 +1247,7 @@ pub struct ExtractIf<'a, I, S, F> {
 impl<'a, I, S, F> Iterator for ExtractIf<'a, I, S, F>
 where
     I: Copy,
-    S: IndexForward<Index = I>,
+    S: IndexForward<Index = I> + IndexStore<Index = I>,
     F: FnMut(I) -> bool,
 {
     type Item = S::Index;
@@ -1280,7 +1280,7 @@ where
 impl<'a, I, S, F> FusedIterator for ExtractIf<'a, I, S, F>
 where
     I: Copy,
-    S: IndexForward<Index = I>,
+    S: IndexForward<Index = I> + IndexStore<Index = I>,
     F: FnMut(I) -> bool,
 {
 }
@@ -1825,7 +1825,7 @@ where
     pub fn bitand_assign<OS>(&mut self, other: &IndexSet<OS>)
     where
         S: IndexForward,
-        OS: IndexStore<Index = S::Index>,
+        OS: IndexView<Index = S::Index>,
     {
         self.retain(|index| other.contains(index));
     }
@@ -1859,7 +1859,8 @@ where
     /// Removes all indexes of `self` not contained in `other`.
     pub fn bitand_assign<OS>(&mut self, other: &IndexOrdSet<OS>)
     where
-        OS: IndexStore<Index = S::Index>,
+        S: IndexStore,
+        OS: IndexView<Index = S::Index>,
     {
         self.retain(|index| other.contains(index));
     }
@@ -1878,6 +1879,7 @@ where
     /// Removes all indexes of `other` from `self`.
     pub fn sub_assign<OS>(&mut self, other: &IndexOrdSet<OS>)
     where
+        S: IndexStore,
         OS: IndexForward<Index = S::Index>,
     {
         other.iter().for_each(|index| {
@@ -1939,7 +1941,7 @@ mod bitwise_tests;
 
 impl<S, OS> ops::BitAndAssign<IndexSet<OS>> for IndexSet<S>
 where
-    S: IndexForward,
+    S: IndexForward + IndexStore,
     OS: IndexStore<Index = S::Index>,
 {
     fn bitand_assign(&mut self, other: IndexSet<OS>) {
@@ -1949,7 +1951,7 @@ where
 
 impl<S, OS> ops::BitAndAssign<&IndexSet<OS>> for IndexSet<S>
 where
-    S: IndexForward,
+    S: IndexForward + IndexStore,
     OS: IndexStore<Index = S::Index>,
 {
     fn bitand_assign(&mut self, other: &IndexSet<OS>) {
@@ -1999,7 +2001,7 @@ where
 
 impl<S, OS> ops::BitAnd<IndexSet<OS>> for IndexSet<S>
 where
-    S: IndexForward,
+    S: IndexForward + IndexStore,
     OS: IndexStore<Index = S::Index>,
 {
     type Output = Self;
@@ -2013,7 +2015,7 @@ where
 
 impl<S, OS> ops::BitAnd<&IndexSet<OS>> for IndexSet<S>
 where
-    S: IndexForward,
+    S: IndexForward + IndexStore,
     OS: IndexStore<Index = S::Index>,
 {
     type Output = Self;
@@ -2087,7 +2089,7 @@ where
 
 impl<S, OS> ops::BitAndAssign<IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered + IndexStore,
     OS: IndexStore<Index = S::Index>,
 {
     fn bitand_assign(&mut self, other: IndexOrdSet<OS>) {
@@ -2097,7 +2099,7 @@ where
 
 impl<S, OS> ops::BitAndAssign<&IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered + IndexStore,
     OS: IndexStore<Index = S::Index>,
 {
     fn bitand_assign(&mut self, other: &IndexOrdSet<OS>) {
@@ -2107,7 +2109,7 @@ where
 
 impl<S, OS> ops::BitOrAssign<IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered<InsertionError = Never>,
+    S: IndexOrdered + IndexStore<InsertionError = Never>,
     OS: IndexForward<Index = S::Index>,
 {
     fn bitor_assign(&mut self, other: IndexOrdSet<OS>) {
@@ -2117,7 +2119,7 @@ where
 
 impl<S, OS> ops::BitOrAssign<&IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered<InsertionError = Never>,
+    S: IndexOrdered + IndexStore<InsertionError = Never>,
     OS: IndexForward<Index = S::Index>,
 {
     fn bitor_assign(&mut self, other: &IndexOrdSet<OS>) {
@@ -2127,7 +2129,7 @@ where
 
 impl<S, OS> ops::BitXorAssign<IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered<InsertionError = Never>,
+    S: IndexOrdered + IndexStore<InsertionError = Never>,
     OS: IndexOrdered<Index = S::Index>,
 {
     fn bitxor_assign(&mut self, other: IndexOrdSet<OS>) {
@@ -2137,7 +2139,7 @@ where
 
 impl<S, OS> ops::BitXorAssign<&IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered<InsertionError = Never>,
+    S: IndexOrdered + IndexStore<InsertionError = Never>,
     OS: IndexOrdered<Index = S::Index>,
 {
     fn bitxor_assign(&mut self, other: &IndexOrdSet<OS>) {
@@ -2147,7 +2149,7 @@ where
 
 impl<S, OS> ops::SubAssign<IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered + IndexStore,
     OS: IndexForward<Index = S::Index>,
 {
     fn sub_assign(&mut self, other: IndexOrdSet<OS>) {
@@ -2157,7 +2159,7 @@ where
 
 impl<S, OS> ops::SubAssign<&IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered + IndexStore,
     OS: IndexForward<Index = S::Index>,
 {
     fn sub_assign(&mut self, other: &IndexOrdSet<OS>) {
@@ -2167,8 +2169,8 @@ where
 
 impl<S, OS> ops::BitAnd<IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
-    OS: IndexStore<Index = S::Index>,
+    S: IndexOrdered + IndexStore,
+    OS: IndexView<Index = S::Index>,
 {
     type Output = Self;
 
@@ -2181,8 +2183,8 @@ where
 
 impl<S, OS> ops::BitAnd<&IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
-    OS: IndexStore<Index = S::Index>,
+    S: IndexOrdered + IndexStore,
+    OS: IndexView<Index = S::Index>,
 {
     type Output = Self;
 
@@ -2195,7 +2197,7 @@ where
 
 impl<S, OS> ops::BitOr<IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered<InsertionError = Never>,
+    S: IndexOrdered + IndexStore<InsertionError = Never>,
     OS: IndexForward<Index = S::Index>,
 {
     type Output = Self;
@@ -2209,7 +2211,7 @@ where
 
 impl<S, OS> ops::BitOr<&IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered<InsertionError = Never>,
+    S: IndexOrdered + IndexStore<InsertionError = Never>,
     OS: IndexForward<Index = S::Index>,
 {
     type Output = Self;
@@ -2223,7 +2225,7 @@ where
 
 impl<S, OS> ops::Sub<IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered + IndexStore,
     OS: IndexForward<Index = S::Index>,
 {
     type Output = Self;
@@ -2237,7 +2239,7 @@ where
 
 impl<S, OS> ops::Sub<&IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered,
+    S: IndexOrdered + IndexStore,
     OS: IndexForward<Index = S::Index>,
 {
     type Output = Self;
@@ -2251,7 +2253,7 @@ where
 
 impl<S, OS> ops::BitXor<IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered<InsertionError = Never>,
+    S: IndexOrdered + IndexStore<InsertionError = Never>,
     OS: IndexOrdered<Index = S::Index>,
 {
     type Output = Self;
@@ -2265,7 +2267,7 @@ where
 
 impl<S, OS> ops::BitXor<&IndexOrdSet<OS>> for IndexOrdSet<S>
 where
-    S: IndexOrdered<InsertionError = Never>,
+    S: IndexOrdered + IndexStore<InsertionError = Never>,
     OS: IndexOrdered<Index = S::Index>,
 {
     type Output = Self;

@@ -5,7 +5,7 @@ use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, 
 use crate::{
     Never,
     chunk::IndexChunk,
-    index::{IndexBackward, IndexCollection, IndexForward, IndexOrdered, IndexStore, IndexVault},
+    index::{IndexBackward, IndexCollection, IndexForward, IndexOrdered, IndexStore, IndexVault, IndexView},
 };
 
 /// Simple implementation of `IndexChunk` for integrals.
@@ -109,10 +109,32 @@ macro_rules! impl_indexes_chunk_for_chunk {
             const BITS: u32 = $u::BITS;
         }
 
-        impl IndexCollection for UnsignedChunk<$u> {
+        //  #   Safety
+        //
+        //  -   NoPhantom: the store WILL only ever return that it contains an index if the index was inserted, and was
+        //      not removed since.
+        unsafe impl IndexView for UnsignedChunk<$u> {
             //  Sufficient for even u128 and an hypothetical u256, it'll serve.
             type Index = u8;
 
+            fn is_empty(&self) -> bool {
+                self.0 == 0
+            }
+
+            fn len(&self) -> usize {
+                self.0.count_ones() as usize
+            }
+
+            fn contains(&self, index: Self::Index) -> bool {
+                let index: u32 = index.into();
+
+                let mask = (1 << index);
+
+                (self.0 & mask) != 0
+            }
+        }
+
+        impl IndexCollection for UnsignedChunk<$u> {
             fn span() -> (Bound<Self::Index>, Bound<Self::Index>) {
                 (Bound::Included(0), Bound::Excluded($u::BITS as u8))
             }
@@ -124,18 +146,6 @@ macro_rules! impl_indexes_chunk_for_chunk {
             fn with_span(_: (Bound<Self::Index>, Bound<Self::Index>)) -> Self {
                 Self::new()
             }
-
-            fn is_empty(&self) -> bool {
-                self.0 == 0
-            }
-
-            fn len(&self) -> usize {
-                self.0.count_ones() as usize
-            }
-
-            fn clear(&mut self) {
-                self.0 = 0;
-            }
         }
 
         //  #   Safety
@@ -145,12 +155,8 @@ macro_rules! impl_indexes_chunk_for_chunk {
         unsafe impl IndexStore for UnsignedChunk<$u> {
             type InsertionError = Never;
 
-            fn contains(&self, index: Self::Index) -> bool {
-                let index: u32 = index.into();
-
-                let mask = (1 << index);
-
-                (self.0 & mask) != 0
+            fn clear(&mut self) {
+                self.0 = 0;
             }
 
             fn insert(&mut self, index: Self::Index) -> Result<bool, Never> {

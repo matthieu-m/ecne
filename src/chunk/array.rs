@@ -6,7 +6,7 @@ use crate::{
     chunk::IndexChunk,
     index::{
         IndexBackward, IndexBackwardChunked, IndexCollection, IndexForward, IndexForwardChunked, IndexOrdered,
-        IndexOrderedChunked, IndexStore, IndexStoreChunked, IndexVault,
+        IndexOrderedChunked, IndexStore, IndexVault, IndexView, IndexViewChunked,
     },
 };
 
@@ -172,12 +172,35 @@ where
     const BITS: u32 = C::BITS * (N as u32);
 }
 
-impl<C, const N: usize> IndexCollection for ArrayChunk<C, N>
+//  Safety:
+//
+//  -   NoPhantom: the store will only ever return that it contains an index if the index was inserted, and was not
+//      removed since.
+unsafe impl<C, const N: usize> IndexView for ArrayChunk<C, N>
 where
     C: IndexChunk<Index = u8>,
 {
     type Index = u16;
 
+    fn is_empty(&self) -> bool {
+        self.0.iter().all(|u| u.is_empty())
+    }
+
+    fn len(&self) -> usize {
+        self.0.iter().map(|u| u.len()).sum()
+    }
+
+    fn contains(&self, index: Self::Index) -> bool {
+        let (outer, inner) = Self::split(index);
+
+        self.0.get(outer).is_some_and(|chunk| chunk.contains(inner))
+    }
+}
+
+impl<C, const N: usize> IndexCollection for ArrayChunk<C, N>
+where
+    C: IndexChunk<Index = u8>,
+{
     fn span() -> (Bound<Self::Index>, Bound<Self::Index>) {
         const {
             assert!((Self::BITS - 1) <= (Self::Index::MAX as u32));
@@ -199,18 +222,6 @@ where
     fn with_span(_: (Bound<Self::Index>, Bound<Self::Index>)) -> Self {
         Self::new()
     }
-
-    fn is_empty(&self) -> bool {
-        self.0.iter().all(|u| u.is_empty())
-    }
-
-    fn len(&self) -> usize {
-        self.0.iter().map(|u| u.len()).sum()
-    }
-
-    fn clear(&mut self) {
-        self.0.iter_mut().for_each(|c| c.clear());
-    }
 }
 
 //  Safety:
@@ -223,10 +234,8 @@ where
 {
     type InsertionError = C::InsertionError;
 
-    fn contains(&self, index: Self::Index) -> bool {
-        let (outer, inner) = Self::split(index);
-
-        self.0.get(outer).is_some_and(|chunk| chunk.contains(inner))
+    fn clear(&mut self) {
+        self.0.iter_mut().for_each(|c| c.clear());
     }
 
     fn insert(&mut self, index: Self::Index) -> Result<bool, Self::InsertionError> {
@@ -334,7 +343,7 @@ unsafe impl<C, const N: usize> IndexOrdered for ArrayChunk<C, N> where C: IndexC
 //  -   NoPhantom: the store will only ever return that it contains an index if the index was inserted, and was not
 //      removed since.
 //  -   TwoLevels: `Self::Index == Self::ChunkIndex * Self::Chunk::BITS + Self::Chunk::Index`.
-unsafe impl<C, const N: usize> IndexStoreChunked for ArrayChunk<C, N>
+unsafe impl<C, const N: usize> IndexViewChunked for ArrayChunk<C, N>
 where
     C: IndexChunk<Index = u8>,
 {

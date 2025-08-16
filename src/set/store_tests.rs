@@ -1,4 +1,4 @@
-//! Unit tests for individual operations.
+//! Unit tests for store operations.
 
 mod index_set {
     use std::collections::HashSet;
@@ -8,23 +8,15 @@ mod index_set {
     type Victim = IndexSet<HashSet<u8>>;
 
     #[test]
-    fn contains() {
-        const EMPTY: [u8; 0] = [];
-        const SOME: [u8; 7] = [1, 2, 3, 5, 7, 11, 13];
+    fn clear() {
+        const INDEXES: [u8; 7] = [1, 2, 3, 5, 7, 11, 13];
 
-        {
-            let victim: Victim = EMPTY.into_iter().collect();
+        let mut victim: Victim = INDEXES.into_iter().collect();
 
-            assert!(!victim.contains(0));
-            assert!(!victim.contains(1));
-        }
+        victim.clear();
 
-        {
-            let victim: Victim = SOME.into_iter().collect();
-
-            assert!(!victim.contains(0));
-            assert!(victim.contains(1));
-        }
+        assert!(victim.is_empty());
+        assert_eq!(0, victim.len());
     }
 
     #[test]
@@ -86,23 +78,15 @@ mod index_ord_set {
     type Victim = IndexOrdSet<BTreeSet<u8>>;
 
     #[test]
-    fn contains() {
-        const EMPTY: [u8; 0] = [];
-        const SOME: [u8; 7] = [1, 2, 3, 5, 7, 11, 13];
+    fn clear() {
+        const INDEXES: [u8; 7] = [1, 2, 3, 5, 7, 11, 13];
 
-        {
-            let victim: Victim = EMPTY.into_iter().collect();
+        let mut victim: Victim = INDEXES.into_iter().collect();
 
-            assert!(!victim.contains(0));
-            assert!(!victim.contains(1));
-        }
+        victim.clear();
 
-        {
-            let victim: Victim = SOME.into_iter().collect();
-
-            assert!(!victim.contains(0));
-            assert!(victim.contains(1));
-        }
+        assert!(victim.is_empty());
+        assert_eq!(0, victim.len());
     }
 
     #[test]

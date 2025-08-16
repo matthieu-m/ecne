@@ -11,15 +11,35 @@ mod btree_set {
 
     use crate::{
         Never,
-        index::{IndexBackward, IndexCollection, IndexForward, IndexOrdered, IndexStore, IndexVault},
+        index::{IndexBackward, IndexCollection, IndexForward, IndexOrdered, IndexStore, IndexVault, IndexView},
     };
 
-    impl<I> IndexCollection for BTreeSet<I>
+    //  #   Safety
+    //
+    //  -   NoPhantom: the store will only ever return indexes that have been inserted and have not been removed since.
+    unsafe impl<I> IndexView for BTreeSet<I>
     where
         I: Copy + Eq + Ord,
     {
         type Index = I;
 
+        fn is_empty(&self) -> bool {
+            self.is_empty()
+        }
+
+        fn len(&self) -> usize {
+            self.len()
+        }
+
+        fn contains(&self, index: Self::Index) -> bool {
+            self.contains(&index)
+        }
+    }
+
+    impl<I> IndexCollection for BTreeSet<I>
+    where
+        I: Copy + Eq + Ord,
+    {
         fn span() -> (Bound<Self::Index>, Bound<Self::Index>) {
             (Bound::Unbounded, Bound::Unbounded)
         }
@@ -30,18 +50,6 @@ mod btree_set {
 
         fn with_span(_range: (Bound<Self::Index>, Bound<Self::Index>)) -> Self {
             Self::new()
-        }
-
-        fn is_empty(&self) -> bool {
-            self.is_empty()
-        }
-
-        fn len(&self) -> usize {
-            self.len()
-        }
-
-        fn clear(&mut self) {
-            self.clear()
         }
     }
 
@@ -54,8 +62,8 @@ mod btree_set {
     {
         type InsertionError = Never;
 
-        fn contains(&self, index: Self::Index) -> bool {
-            self.contains(&index)
+        fn clear(&mut self) {
+            self.clear()
         }
 
         fn insert(&mut self, index: Self::Index) -> Result<bool, Never> {
@@ -173,16 +181,37 @@ mod hash_set {
 
     use crate::{
         Never,
-        index::{IndexCollection, IndexStore, IndexVault},
+        index::{IndexCollection, IndexStore, IndexVault, IndexView},
     };
 
-    impl<I, S> IndexCollection for HashSet<I, S>
+    //  #   Safety
+    //
+    //  -   NoPhantom: the store will only ever return indexes that have been inserted and have not been removed since.
+    unsafe impl<I, S> IndexView for HashSet<I, S>
     where
-        I: Copy + Eq + Ord,
-        S: Default,
+        I: Copy + Eq + Hash + Ord,
+        S: BuildHasher,
     {
         type Index = I;
 
+        fn is_empty(&self) -> bool {
+            self.is_empty()
+        }
+
+        fn len(&self) -> usize {
+            self.len()
+        }
+
+        fn contains(&self, index: Self::Index) -> bool {
+            self.contains(&index)
+        }
+    }
+
+    impl<I, S> IndexCollection for HashSet<I, S>
+    where
+        I: Copy + Eq + Hash + Ord,
+        S: Default + BuildHasher,
+    {
         fn span() -> (Bound<Self::Index>, Bound<Self::Index>) {
             (Bound::Unbounded, Bound::Unbounded)
         }
@@ -193,18 +222,6 @@ mod hash_set {
 
         fn with_span(_range: (Bound<Self::Index>, Bound<Self::Index>)) -> Self {
             Self::new()
-        }
-
-        fn is_empty(&self) -> bool {
-            self.is_empty()
-        }
-
-        fn len(&self) -> usize {
-            self.len()
-        }
-
-        fn clear(&mut self) {
-            self.clear()
         }
     }
 
@@ -218,8 +235,8 @@ mod hash_set {
     {
         type InsertionError = Never;
 
-        fn contains(&self, index: Self::Index) -> bool {
-            self.contains(&index)
+        fn clear(&mut self) {
+            self.clear()
         }
 
         fn insert(&mut self, index: Self::Index) -> Result<bool, Self::InsertionError> {

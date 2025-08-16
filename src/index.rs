@@ -7,14 +7,31 @@ use core::ops::Try;
 
 use crate::chunk::IndexChunk;
 
-/// A collection indexes.
-pub trait IndexCollection {
+/// A view of indexes.
+///
+/// #   Safety
+///
+/// -   NoPhantom: the view SHALL only ever return that it contains an index if the index was inserted, and was not
+///     removed since.
+pub unsafe trait IndexView {
     /// The type of the index.
     ///
     /// There is no guarantee that the index is stored verbatim, and it may, in fact, be de-materialized on storing it,
     /// and re-materialized on retrieving it.
     type Index: Copy + Eq + Ord;
 
+    /// Returns whether the collection is empty, or not.
+    fn is_empty(&self) -> bool;
+
+    /// Returns the number of indexes in the collection.
+    fn len(&self) -> usize;
+
+    /// Returns whether the given index is contained in the store.
+    fn contains(&self, index: Self::Index) -> bool;
+}
+
+/// A collection of indexes.
+pub trait IndexCollection: IndexView {
     /// Returns the span of index values which MAY be inserted.
     ///
     /// Attempts to insert values outside this span WILL fail, possibly via panicking or aborting.
@@ -29,29 +46,19 @@ pub trait IndexCollection {
     ///
     /// Implementers should attempt to pre-reserve the necessary space for the given span, if possible.
     fn with_span(range: (Bound<Self::Index>, Bound<Self::Index>)) -> Self;
-
-    /// Returns whether the collection is empty, or not.
-    fn is_empty(&self) -> bool;
-
-    /// Returns the number of indexes in the collection.
-    fn len(&self) -> usize;
-
-    /// Removes all the indexes from the collection.
-    fn clear(&mut self);
 }
 
 /// A store of indexes.
 ///
 /// #   Safety
 ///
-/// -   NoPhantom: the store SHALL only ever return that it contains an index if the index was inserted, and was not
-///     removed since.
-pub unsafe trait IndexStore: IndexCollection {
+/// -   NoPhantom: the store will only ever return indexes that have been inserted and have not been removed since.
+pub unsafe trait IndexStore: IndexView {
     /// Error on insertion.
     type InsertionError;
 
-    /// Returns whether the given index is contained in the store.
-    fn contains(&self, index: Self::Index) -> bool;
+    /// Removes all the indexes from the store.
+    fn clear(&mut self);
 
     /// Inserts the index in the store, returns whether it is newly inserted.
     ///
@@ -80,7 +87,7 @@ pub unsafe trait IndexVault: IndexStore {}
 /// -   NoPhantom: the view SHALL only ever return that it contains an index if the index was inserted, and was not
 ///     removed since.
 /// -   NoTheft: if `Self` implements `IndexVault`, the view SHALL return all indexes.
-pub unsafe trait IndexForward: IndexStore {
+pub unsafe trait IndexForward: IndexView {
     //  Why not an iterator?
     //
     //  Implementing functionality such as `drain`, `extract_if`, or `retain`, requires mutable access in-between steps.
@@ -196,7 +203,7 @@ pub unsafe trait IndexOrdered: IndexForward {}
 ///     removed since.
 /// -   TwoLevels: if `Self` also implements `IndexStore`, then
 ///     `Self::Index == Self::ChunkIndex * Self::Chunk::BITS + Self::Chunk::Index`.
-pub unsafe trait IndexStoreChunked {
+pub unsafe trait IndexViewChunked {
     /// Index of the chunks.
     type ChunkIndex: Copy + Eq + Ord;
 
@@ -219,7 +226,7 @@ pub unsafe trait IndexStoreChunked {
 /// -   NoPhantom: the view SHALL only ever return that it contains an index if the index was inserted, and was not
 ///     removed since.
 /// -   NoTheft: if `Self` implements `IndexVault`, the view SHALL return all indexes.
-pub unsafe trait IndexForwardChunked: IndexStoreChunked {
+pub unsafe trait IndexForwardChunked: IndexViewChunked {
     /// Returns one index of a chunk.
     ///
     /// If `Self` implements `IndexVault`, no prior chunk SHALL contain any set index.
@@ -236,7 +243,7 @@ pub unsafe trait IndexForwardChunked: IndexStoreChunked {
 /// #   Safety
 ///
 /// -   Reverse: the view SHALL return indexes in the exact opposite sequence than `IndexForwardChunked` does.
-pub unsafe trait IndexBackwardChunked: IndexForwardChunked {
+pub unsafe trait IndexBackwardChunked: IndexViewChunked {
     /// Returns one index of a chunk.
     ///
     /// If `Self` implements `IndexVault`, not later chunk SHALL contain any set index.
@@ -326,9 +333,23 @@ mod tests {
         assert_eq!(Err(8), victim.nth_before(7, 1).map_err(|e| e.get()));
     }
 
-    impl IndexCollection for Victim {
+    unsafe impl IndexView for Victim {
         type Index = usize;
 
+        fn is_empty(&self) -> bool {
+            self.0.is_empty()
+        }
+
+        fn len(&self) -> usize {
+            self.0.len()
+        }
+
+        fn contains(&self, index: Self::Index) -> bool {
+            self.0.contains(&index)
+        }
+    }
+
+    impl IndexCollection for Victim {
         fn span() -> (Bound<Self::Index>, Bound<Self::Index>) {
             (Bound::Included(usize::MIN), Bound::Included(usize::MAX))
         }
@@ -340,18 +361,6 @@ mod tests {
         fn with_span(_range: (Bound<Self::Index>, Bound<Self::Index>)) -> Self {
             Self::default()
         }
-
-        fn is_empty(&self) -> bool {
-            self.0.is_empty()
-        }
-
-        fn len(&self) -> usize {
-            self.0.len()
-        }
-
-        fn clear(&mut self) {
-            self.0.clear();
-        }
     }
 
     //  Safety:
@@ -360,8 +369,8 @@ mod tests {
     unsafe impl IndexStore for Victim {
         type InsertionError = Never;
 
-        fn contains(&self, index: Self::Index) -> bool {
-            self.0.contains(&index)
+        fn clear(&mut self) {
+            self.0.clear();
         }
 
         fn insert(&mut self, index: Self::Index) -> Result<bool, Self::InsertionError> {
