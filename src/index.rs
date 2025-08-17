@@ -126,8 +126,6 @@ pub unsafe trait IndexForward: IndexView {
         F: FnMut(B, Self::Index) -> R,
         R: Try<Output = B>,
     {
-        accumulator = f(accumulator, current)?;
-
         loop {
             let Some(n) = self.next_after(current) else {
                 return R::from_output(accumulator);
@@ -182,8 +180,6 @@ pub unsafe trait IndexBackward: IndexForward {
         F: FnMut(B, Self::Index) -> R,
         R: Try<Output = B>,
     {
-        accumulator = f(accumulator, current)?;
-
         loop {
             let Some(n) = self.next_before(current) else {
                 return R::from_output(accumulator);

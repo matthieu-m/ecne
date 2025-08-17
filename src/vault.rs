@@ -114,9 +114,7 @@ mod btree_set {
             F: FnMut(B, Self::Index) -> R,
             R: Try<Output = B>,
         {
-            self.range((Bound::Included(current), Bound::Unbounded))
-                .copied()
-                .try_fold(accumulator, f)
+            self.range(forward_range(current)).copied().try_fold(accumulator, f)
         }
     }
 
@@ -150,9 +148,7 @@ mod btree_set {
             F: FnMut(B, Self::Index) -> R,
             R: Try<Output = B>,
         {
-            self.range((Bound::Unbounded, Bound::Included(current)))
-                .copied()
-                .try_rfold(accumulator, f)
+            self.range(backward_range(current)).copied().try_rfold(accumulator, f)
         }
     }
 

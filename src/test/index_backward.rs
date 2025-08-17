@@ -171,7 +171,7 @@ where
             })
             .expect("no error");
 
-        assert!(indexes[..] == result);
+        assert!(indexes[1..] == result);
     }
 
     /// Checks that a non-empty victim stops folding the items when instructed so.
@@ -206,7 +206,7 @@ where
                 })
                 .expect_err("error");
 
-            assert!(indexes[..fail] == visited, "{fail}");
+            assert!(indexes[1..fail] == visited, "{fail}");
             assert!(indexes[fail] == result, "{fail}");
         }
     }
