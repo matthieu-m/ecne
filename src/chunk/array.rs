@@ -193,6 +193,8 @@ where
     fn contains(&self, index: Self::Index) -> bool {
         let (outer, inner) = Self::split(index);
 
+        let outer: usize = outer.into();
+
         self.0.get(outer).is_some_and(|chunk| chunk.contains(inner))
     }
 }
@@ -241,6 +243,8 @@ where
     fn insert(&mut self, index: Self::Index) -> Result<bool, Self::InsertionError> {
         let (outer, inner) = Self::split(index);
 
+        let outer: usize = outer.into();
+
         //  The user should always specify an in-bounds index. If they don't... that's their problem.
         let Some(chunk) = self.0.get_mut(outer) else {
             return Ok(false);
@@ -251,6 +255,8 @@ where
 
     fn remove(&mut self, index: Self::Index) -> bool {
         let (outer, inner) = Self::split(index);
+
+        let outer: usize = outer.into();
 
         self.0.get_mut(outer).is_some_and(|chunk| chunk.remove(inner))
     }
@@ -275,14 +281,16 @@ where
     fn first(&self) -> Option<Self::Index> {
         let (outer, inner) = self.0.iter().enumerate().find_map(|(i, c)| c.first().map(|r| (i, r)))?;
 
-        Some(Self::fuse(outer, inner))
+        Some(Self::fuse(outer as u16, inner))
     }
 
     fn next_after(&self, current: Self::Index) -> Option<Self::Index> {
         let (outer, inner) = Self::split(current);
 
+        let outer: usize = outer.into();
+
         if let Some(inner) = self.0.get(outer).and_then(|chunk| chunk.next_after(inner)) {
-            return Some(Self::fuse(outer, inner));
+            return Some(Self::fuse(outer as u16, inner));
         }
 
         let (outer, inner) = self
@@ -292,7 +300,7 @@ where
             .skip(outer + 1)
             .find_map(|(i, c)| c.first().map(|r| (i, r)))?;
 
-        Some(Self::fuse(outer, inner))
+        Some(Self::fuse(outer as u16, inner))
     }
 }
 
@@ -311,14 +319,16 @@ where
             .rev()
             .find_map(|(i, c)| c.last().map(|r| (i, r)))?;
 
-        Some(Self::fuse(outer, inner))
+        Some(Self::fuse(outer as u16, inner))
     }
 
     fn next_before(&self, current: Self::Index) -> Option<Self::Index> {
         let (outer, inner) = Self::split(current);
 
+        let outer: usize = outer.into();
+
         if let Some(inner) = self.0.get(outer).and_then(|chunk| chunk.next_before(inner)) {
-            return Some(Self::fuse(outer, inner));
+            return Some(Self::fuse(outer as u16, inner));
         }
 
         let limit = outer.min(self.0.len());
@@ -331,7 +341,7 @@ where
             .rev()
             .find_map(|(i, c)| c.last().map(|r| (i, r)))?;
 
-        Some(Self::fuse(outer, inner))
+        Some(Self::fuse(outer as u16, inner))
     }
 }
 
@@ -342,15 +352,37 @@ unsafe impl<C, const N: usize> IndexOrdered for ArrayChunk<C, N> where C: IndexC
 
 //  Safety:
 //
-//  -   NoPhantom: the store will only ever return that it contains an index if the index was inserted, and was not
+//  -   NoPhantom: the view will only ever return that it contains an index if the index was inserted, and was not
 //      removed since.
-//  -   TwoLevels: `Self::Index == Self::ChunkIndex * Self::Chunk::BITS + Self::Chunk::Index`.
+//  -   SplitFuse: `split` and `fuse` are one another inverse.
+//  -   TwoLevels: `split` and `fuse` are consistent with `IndexView`.
 unsafe impl<C, const N: usize> IndexViewChunked for ArrayChunk<C, N>
 where
     C: IndexChunk<Index = u8>,
 {
     type ChunkIndex = u16;
     type Chunk = C;
+
+    fn fuse(outer: Self::ChunkIndex, inner: C::Index) -> Self::Index {
+        //  Will never overflow, because all indexes retrieved _were once inserted_, and they could only be inserted
+        //  by being `u16` in the first place.
+
+        let bits = C::BITS as u16;
+
+        let inner: u16 = inner.into();
+
+        outer * bits + inner
+    }
+
+    fn split(index: Self::Index) -> (Self::ChunkIndex, C::Index) {
+        //  C is indexed by u8, ergo C::BITS is small enough that `index % bits` fits in u8.
+
+        let bits = C::BITS as u16;
+
+        let (outer, inner) = (index / bits, index % bits);
+
+        (outer, inner as u8)
+    }
 
     fn get_chunk(&self, index: Self::ChunkIndex) -> Option<Self::Chunk> {
         self.0.get(index as usize).copied()
@@ -398,40 +430,6 @@ where
 //
 //  -   Ordered: the view will return indexes in strictly increasing order.
 unsafe impl<C, const N: usize> IndexOrderedChunked for ArrayChunk<C, N> where C: IndexChunk<Index = u8> {}
-
-//
-//  Implementation
-//
-
-impl<C, const N: usize> ArrayChunk<C, N>
-where
-    C: IndexChunk<Index = u8>,
-{
-    fn fuse(outer: usize, inner: u8) -> u16 {
-        //  Will never overflow, because all indexes retrieved _were once inserted_, and they could only be inserted
-        //  by being `u16` in the first place.
-
-        let bits = C::BITS as usize;
-
-        let inner: usize = inner.into();
-
-        let index = outer * bits + inner;
-
-        index as u16
-    }
-
-    fn split(index: u16) -> (usize, u8) {
-        //  C is indexed by u8, ergo C::BITS is small enough that `index % bits` fits in u8.
-
-        let bits = C::BITS as usize;
-
-        let index: usize = index.into();
-
-        let (outer, inner) = (index / bits, index % bits);
-
-        (outer, inner as u8)
-    }
-}
 
 #[cfg(test)]
 mod tests {

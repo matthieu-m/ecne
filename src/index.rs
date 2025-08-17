@@ -209,14 +209,25 @@ pub unsafe trait IndexOrdered: IndexForward {}
 ///
 /// -   NoPhantom: the store SHALL only ever return that it contains an index if the index was inserted, and was not
 ///     removed since.
-/// -   TwoLevels: if `Self` also implements `IndexStore`, then
-///     `Self::Index == Self::ChunkIndex * Self::Chunk::BITS + Self::Chunk::Index`.
-pub unsafe trait IndexViewChunked {
+/// -   SplitFuse: `index` == `Self::fuse(Self::split(index))`.
+/// -   TwoLevels: `self.contains(index)` if and only if
+///     `self.get_chunk(Self::split(index).0).is_some_and(|c| c.contains(Self::split(index).1))`.
+pub unsafe trait IndexViewChunked: IndexView {
     /// Index of the chunks.
     type ChunkIndex: Copy + Eq + Ord;
 
     /// Type of the chunk.
     type Chunk: IndexChunk;
+
+    /// Fuses a tuple (chunk index, index-in-chunk) into a single index.
+    ///
+    /// Only defined if `outer`/`inner` refer to an index contained in an instance of `Self`.
+    fn fuse(outer: Self::ChunkIndex, inner: <Self::Chunk as IndexView>::Index) -> Self::Index;
+
+    /// Splits an index into a tuple (chunk index, index-in-chunk).
+    ///
+    /// Only defined if `index` refers to an index contained in an instance of `Self`.
+    fn split(index: Self::Index) -> (Self::ChunkIndex, <Self::Chunk as IndexView>::Index);
 
     /// Returns the given chunk, if any.
     ///
