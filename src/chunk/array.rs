@@ -467,4 +467,7 @@ mod tests {
     crate::test_index_store!(Tester);
     crate::test_index_forward!(Tester);
     crate::test_index_backward!(Tester);
+    crate::test_index_view_chunked!(Tester);
+    crate::test_index_forward_chunked!(Tester);
+    crate::test_index_backward_chunked!(Tester);
 } // mod tests

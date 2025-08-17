@@ -67,8 +67,8 @@ where
     /// Validates `T` itself.
     pub fn validate() {
         assert!(
-            T::upper_bound() > Self::MINIMUM_UPPER_BOUND,
-            "{} <= {}",
+            T::upper_bound() >= Self::MINIMUM_UPPER_BOUND,
+            "{} < {}",
             T::upper_bound(),
             Self::MINIMUM_UPPER_BOUND
         );
