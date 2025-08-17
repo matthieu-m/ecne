@@ -235,6 +235,23 @@ pub unsafe trait IndexViewChunked: IndexView {
     fn get_chunk(&self, index: Self::ChunkIndex) -> Option<Self::Chunk>;
 }
 
+/// A store of indexes.
+///
+/// #   Safety
+///
+/// -   NoPhantom: the store will only ever return indexes that have been inserted and have not been removed since.
+pub unsafe trait IndexStoreChunked: IndexViewChunked {
+    /// Error on `set_chunk`.
+    type SetError: fmt::Debug;
+
+    /// Replaces the chunk at the given index.
+    ///
+    /// Returns an error if the chunk could not be set.
+    ///
+    /// Implementers are encouraged to make the operation atomic.
+    fn set_chunk(&mut self, index: Self::ChunkIndex, chunk: Self::Chunk) -> Result<(), Self::SetError>;
+}
+
 /// An iterable _chunked_ view of the indexes in the store.
 ///
 /// For backward iteration -- whatever that means -- see `IndexBackwardChunked`.

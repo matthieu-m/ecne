@@ -178,12 +178,104 @@ mod index_ord_set {
     }
 } // mod index_ord_set
 
+mod index_chunked_set {
+    use crate::{
+        chunk::{ArrayChunk, UnsignedChunk},
+        set::IndexChunkedSet,
+    };
+
+    use super::helper;
+
+    type Victim = IndexChunkedSet<ArrayChunk<UnsignedChunk<u8>, 2>>;
+
+    const EMPTY: [u16; 0] = [];
+    const PRIMES: [u16; 4] = [1, 2, 3, 5];
+    const EVEN_PRIMES: [u16; 1] = [2];
+    const ODD_PRIMES: [u16; 3] = [1, 3, 5];
+
+    #[test]
+    fn drain() {
+        let mut victim = Victim::from_iter(PRIMES);
+
+        helper::assert_iterator(victim.drain(), PRIMES);
+        helper::assert_exact_iterator(victim.iter(), EMPTY);
+    }
+
+    #[test]
+    fn extract_if() {
+        {
+            let mut victim = Victim::from_iter(PRIMES);
+
+            helper::assert_iterator(victim.extract_if(|_| false), EMPTY);
+            helper::assert_exact_iterator(victim.iter(), PRIMES);
+        }
+
+        {
+            let mut victim = Victim::from_iter(PRIMES);
+
+            helper::assert_iterator(victim.extract_if(|_| true), PRIMES);
+            helper::assert_exact_iterator(victim.iter(), EMPTY);
+        }
+
+        {
+            let mut victim = Victim::from_iter(PRIMES);
+
+            helper::assert_iterator(victim.extract_if(|i: u16| i.is_multiple_of(2)), EVEN_PRIMES);
+            helper::assert_exact_iterator(victim.iter(), ODD_PRIMES);
+        }
+
+        {
+            let mut victim = Victim::from_iter(PRIMES);
+
+            helper::assert_iterator(victim.extract_if(|i: u16| !i.is_multiple_of(2)), ODD_PRIMES);
+            helper::assert_exact_iterator(victim.iter(), EVEN_PRIMES);
+        }
+    }
+
+    #[test]
+    fn retain() {
+        {
+            let mut victim = Victim::from_iter(PRIMES);
+
+            victim.retain(|_| true);
+
+            helper::assert_exact_iterator(victim.iter(), PRIMES);
+        }
+
+        {
+            let mut victim = Victim::from_iter(PRIMES);
+
+            victim.retain(|_| false);
+
+            helper::assert_exact_iterator(victim.iter(), EMPTY);
+        }
+
+        {
+            let mut victim = Victim::from_iter(PRIMES);
+
+            victim.retain(|i| !i.is_multiple_of(2));
+
+            helper::assert_exact_iterator(victim.iter(), ODD_PRIMES);
+        }
+
+        {
+            let mut victim = Victim::from_iter(PRIMES);
+
+            victim.retain(|i| i.is_multiple_of(2));
+
+            helper::assert_exact_iterator(victim.iter(), EVEN_PRIMES);
+        }
+    }
+} // mod index_chunked_set
+
 mod helper {
+    use core::fmt;
+
     #[track_caller]
     pub(super) fn assert_iterator<I, E>(mut victim: I, expected: E)
     where
-        I: Iterator<Item = u8>,
-        E: IntoIterator<Item = u8>,
+        I: Iterator<Item: fmt::Debug + Eq>,
+        E: IntoIterator<Item = I::Item>,
     {
         let mut expected = expected.into_iter();
 
@@ -202,8 +294,8 @@ mod helper {
     #[track_caller]
     pub(super) fn assert_exact_iterator<I, E>(mut victim: I, expected: E)
     where
-        I: ExactSizeIterator<Item = u8>,
-        E: IntoIterator<IntoIter: ExactSizeIterator<Item = u8>>,
+        I: ExactSizeIterator<Item: fmt::Debug + Eq>,
+        E: IntoIterator<IntoIter: ExactSizeIterator<Item = I::Item>>,
     {
         let mut i = 0;
         let mut expected = expected.into_iter();

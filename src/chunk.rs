@@ -3,7 +3,10 @@
 mod array;
 mod unsigned;
 
-use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not, Sub, SubAssign};
+use core::{
+    cmp::Eq,
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not, Sub, SubAssign},
+};
 
 use crate::index::{IndexCollection, IndexStore};
 
@@ -13,6 +16,8 @@ pub use unsigned::UnsignedChunk;
 /// A chunk of indexes.
 pub trait IndexChunk:
     Copy
+    + Default
+    + Eq
     + BitAnd<Output = Self>
     + BitAndAssign
     + BitOr<Output = Self>

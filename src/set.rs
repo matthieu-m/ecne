@@ -1,6 +1,6 @@
 //! The `IndexSet` struct is an index-keyed set built above any type implementing `IndexStore`.
 //!
-//! The `IndexOrdSet`, `IndexChunkSet`, and `IndexSliceSet` implement more efficient set operations, by leaning on
+//! The `IndexOrdSet`, `IndexChunkedSet`, and `IndexSliceSet` implement more efficient set operations, by leaning on
 //! refinements of the `IndexStore` trait.
 
 use core::{
@@ -14,7 +14,10 @@ use core::ops::Try;
 
 use crate::{
     Never,
-    index::{IndexBackward, IndexCollection, IndexForward, IndexOrdered, IndexStore, IndexView},
+    index::{
+        IndexBackward, IndexBackwardChunked, IndexCollection, IndexForward, IndexForwardChunked, IndexOrdered,
+        IndexOrderedChunked, IndexStore, IndexStoreChunked, IndexView, IndexViewChunked,
+    },
 };
 
 /// A set of indexes.
@@ -26,6 +29,12 @@ pub struct IndexSet<S> {
 /// A set of indexes.
 #[derive(Clone, Copy, Debug)]
 pub struct IndexOrdSet<S> {
+    store: S,
+}
+
+/// A set of indexes.
+#[derive(Clone, Copy, Debug)]
+pub struct IndexChunkedSet<S> {
     store: S,
 }
 
@@ -100,6 +109,40 @@ where
     }
 }
 
+impl<S> IndexChunkedSet<S>
+where
+    S: IndexCollection + IndexOrderedChunked,
+{
+    /// Returns the span of index values which MAY be inserted.
+    ///
+    /// Attempts to insert values outside this span WILL fail, possibly via panicking or aborting.
+    #[inline(always)]
+    pub fn span() -> (Bound<S::Index>, Bound<S::Index>) {
+        S::span()
+    }
+
+    /// Creates a new, empty, instance.
+    #[inline(always)]
+    pub fn new() -> Self {
+        Self::with_store(S::new())
+    }
+
+    /// Creates a new, empty, instance, with appropriate capacity for storing up to `n` indexes if possible.
+    ///
+    /// This is purely a _best effort_ method, as not all collections allow reserving extra space, and some may have a
+    /// a maximum capacity that is below `n` anyway.
+    #[inline(always)]
+    pub fn with_span(range: (Bound<S::Index>, Bound<S::Index>)) -> Self {
+        Self::with_store(S::with_span(range))
+    }
+
+    /// Creates a new instance from the original store.
+    #[inline(always)]
+    pub const fn with_store(store: S) -> Self {
+        Self { store }
+    }
+}
+
 impl<S> Default for IndexSet<S>
 where
     S: IndexCollection,
@@ -112,6 +155,15 @@ where
 impl<S> Default for IndexOrdSet<S>
 where
     S: IndexCollection + IndexOrdered,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<S> Default for IndexChunkedSet<S>
+where
+    S: IndexCollection + IndexOrderedChunked,
 {
     fn default() -> Self {
         Self::new()
@@ -150,6 +202,22 @@ where
     }
 }
 
+impl<A, S> FromIterator<A> for IndexChunkedSet<S>
+where
+    S: IndexCollection<Index = A> + IndexOrderedChunked<Index = A> + IndexStore<Index = A, InsertionError = Never>,
+{
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = A>,
+    {
+        let mut this = Self::new();
+
+        this.extend(iter);
+
+        this
+    }
+}
+
 #[cfg(test)]
 mod construction_tests;
 
@@ -175,6 +243,23 @@ impl<S> IndexSet<S> {
 }
 
 impl<S> IndexOrdSet<S> {
+    /// Returns a reference to the underlying store.
+    pub fn as_store(&self) -> &S {
+        &self.store
+    }
+
+    /// Returns a mutable reference to the underlying store.
+    pub fn as_store_mut(&mut self) -> &mut S {
+        &mut self.store
+    }
+
+    /// Returns the store.
+    pub fn into_store(self) -> S {
+        self.store
+    }
+}
+
+impl<S> IndexChunkedSet<S> {
     /// Returns a reference to the underlying store.
     pub fn as_store(&self) -> &S {
         &self.store
@@ -235,6 +320,36 @@ where
     }
 }
 
+impl<S> IndexChunkedSet<S>
+where
+    S: IndexView,
+{
+    /// Returns whether the set is empty, or not.
+    pub fn is_empty(&self) -> bool {
+        self.store.is_empty()
+    }
+
+    /// Returns the number of indexes in the set.
+    pub fn len(&self) -> usize {
+        self.store.len()
+    }
+
+    /// Returns whether the index is contained in the set.
+    pub fn contains(&self, index: S::Index) -> bool {
+        self.store.contains(index)
+    }
+}
+
+impl<S> IndexChunkedSet<S>
+where
+    S: IndexViewChunked,
+{
+    /// Returns the chunk, if any.
+    pub fn get_chunk(&self, index: S::ChunkIndex) -> Option<S::Chunk> {
+        self.store.get_chunk(index)
+    }
+}
+
 #[cfg(test)]
 mod view_tests;
 
@@ -282,6 +397,26 @@ where
     }
 }
 
+impl<S> IndexChunkedSet<S>
+where
+    S: IndexStore,
+{
+    /// Removes all indexes from the set.
+    pub fn clear(&mut self) {
+        self.store.clear()
+    }
+
+    /// Inserts the index in the set, returns whether it is newly inserted.
+    pub fn insert(&mut self, index: S::Index) -> Result<bool, S::InsertionError> {
+        self.store.insert(index)
+    }
+
+    /// Removes the index from the set, returns whether it was in the set prior to removal.
+    pub fn remove(&mut self, index: S::Index) -> bool {
+        self.store.remove(index)
+    }
+}
+
 impl<A, S> Extend<A> for IndexSet<S>
 where
     S: IndexStore<Index = A, InsertionError = Never>,
@@ -302,6 +437,25 @@ where
 }
 
 impl<A, S> Extend<A> for IndexOrdSet<S>
+where
+    S: IndexStore<Index = A, InsertionError = Never>,
+{
+    fn extend<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = A>,
+    {
+        for index in iter {
+            let _ = self.insert(index);
+        }
+    }
+
+    #[cfg(feature = "nightly")]
+    fn extend_one(&mut self, index: A) {
+        let _ = self.insert(index);
+    }
+}
+
+impl<A, S> Extend<A> for IndexChunkedSet<S>
 where
     S: IndexStore<Index = A, InsertionError = Never>,
 {
@@ -393,6 +547,51 @@ where
     }
 }
 
+impl<S> IndexChunkedSet<S>
+where
+    S: IndexForwardChunked,
+{
+    /// Returns whether `self` and `other` are disjoint, ie do not have any index in common.
+    pub fn is_disjoint<OS>(&self, other: &IndexChunkedSet<OS>) -> bool
+    where
+        OS: IndexViewChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+    {
+        self.iter_chunks().all(|outer| {
+            let Some(chunk) = self.store.get_chunk(outer) else {
+                return true;
+            };
+
+            chunk.is_empty() || other.get_chunk(outer).is_none_or(|c| (chunk & c).is_empty())
+        })
+    }
+
+    /// Returns whether `self` is a subset of `other`, ie whether all elements of `self` are contained in `other`.
+    ///
+    /// If `self` is a subset of `other`, then `other` is a superset of `self`, and vice-versa.
+    pub fn is_subset<OS>(&self, other: &IndexChunkedSet<OS>) -> bool
+    where
+        OS: IndexViewChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+    {
+        self.iter_chunks().all(|outer| {
+            let Some(chunk) = self.store.get_chunk(outer) else {
+                return true;
+            };
+
+            chunk.is_empty() || other.get_chunk(outer).is_some_and(|c| (chunk & c) == chunk)
+        })
+    }
+
+    /// Returns whether `self` is a superset of `other`, ie whether all elements of `other` are contained in `self`.
+    ///
+    /// If `self` is a superset of `other`, then `other` is a subset of `self`, and vice-versa.
+    pub fn is_superset<OS>(&self, other: &IndexChunkedSet<OS>) -> bool
+    where
+        OS: IndexForwardChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+    {
+        other.is_subset(self)
+    }
+}
+
 #[cfg(test)]
 mod inclusion_tests;
 
@@ -421,6 +620,26 @@ where
 }
 
 impl<S> IndexOrdSet<S>
+where
+    S: IndexStore,
+{
+    /// Returns the entry.
+    pub fn entry(&mut self, index: S::Index) -> Entry<'_, S::Index, S> {
+        if self.contains(index) {
+            Entry::Occupied(OccupiedEntry {
+                index,
+                store: &mut self.store,
+            })
+        } else {
+            Entry::Vacant(VacantEntry {
+                index,
+                store: &mut self.store,
+            })
+        }
+    }
+}
+
+impl<S> IndexChunkedSet<S>
 where
     S: IndexStore,
 {
@@ -597,6 +816,30 @@ where
     }
 }
 
+impl<S> IndexChunkedSet<S>
+where
+    S: IndexForward,
+{
+    /// Returns an iterator over the indexes in the set.
+    pub fn iter(&self) -> Iter<'_, S::Index, S> {
+        Iter {
+            next: self.store.first(),
+            yielded: 0,
+            store: &self.store,
+        }
+    }
+
+    /// Returns an iterator over the indexes in the set.
+    #[allow(clippy::should_implement_trait)]
+    pub fn into_iter(self) -> IntoIter<S::Index, S> {
+        IntoIter {
+            next: self.store.first(),
+            yielded: 0,
+            store: self.store,
+        }
+    }
+}
+
 impl<S> IndexSet<S>
 where
     S: IndexBackward,
@@ -621,6 +864,29 @@ where
 }
 
 impl<S> IndexOrdSet<S>
+where
+    S: IndexBackward,
+{
+    /// Returns an iterator over the indexes in the set.
+    pub fn iter_rev(&self) -> IterRev<'_, S::Index, S> {
+        IterRev {
+            next: self.store.last(),
+            yielded: 0,
+            store: &self.store,
+        }
+    }
+
+    /// Returns an iterator over the indexes in the set.
+    pub fn into_iter_rev(self) -> IntoIterRev<S::Index, S> {
+        IntoIterRev {
+            next: self.store.last(),
+            yielded: 0,
+            store: self.store,
+        }
+    }
+}
+
+impl<S> IndexChunkedSet<S>
 where
     S: IndexBackward,
 {
@@ -680,6 +946,30 @@ where
 }
 
 impl<S> IntoIterator for IndexOrdSet<S>
+where
+    S: IndexForward,
+{
+    type Item = S::Index;
+    type IntoIter = IntoIter<S::Index, S>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.into_iter()
+    }
+}
+
+impl<'a, S> IntoIterator for &'a IndexChunkedSet<S>
+where
+    S: IndexForward,
+{
+    type Item = S::Index;
+    type IntoIter = Iter<'a, S::Index, S>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<S> IntoIterator for IndexChunkedSet<S>
 where
     S: IndexForward,
 {
@@ -1063,6 +1353,150 @@ where
 mod basic_iteration_tests;
 
 //
+//  Iterator operations: chunk iteration.
+//
+
+impl<S> IndexChunkedSet<S>
+where
+    S: IndexForwardChunked,
+{
+    /// Returns an iterator over the indexes in the set.
+    pub fn iter_chunks(&self) -> IterChunked<'_, S::ChunkIndex, S> {
+        IterChunked {
+            next: self.store.first_chunk(),
+            yielded: 0,
+            store: &self.store,
+        }
+    }
+}
+
+impl<S> IndexChunkedSet<S>
+where
+    S: IndexBackwardChunked,
+{
+    /// Returns an iterator over the indexes in the set.
+    pub fn iter_chunks_rev(&self) -> IterChunkedRev<'_, S::ChunkIndex, S> {
+        IterChunkedRev {
+            next: self.store.last_chunk(),
+            yielded: 0,
+            store: &self.store,
+        }
+    }
+}
+
+/// Iterator over the chunk indexes of S.
+pub struct IterChunked<'a, I, S> {
+    next: Option<I>,
+    yielded: usize,
+    store: &'a S,
+}
+
+impl<'a, I, S> Iterator for IterChunked<'a, I, S>
+where
+    I: Copy,
+    S: IndexForwardChunked<ChunkIndex = I>,
+{
+    type Item = I;
+
+    fn count(self) -> usize {
+        self.len()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let length = self.len();
+
+        (length, Some(length))
+    }
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let result = self.next.take()?;
+
+        self.yielded += 1;
+        self.next = self.store.next_chunk_after(result);
+
+        Some(result)
+    }
+}
+
+impl<'a, I, S> ExactSizeIterator for IterChunked<'a, I, S>
+where
+    I: Copy,
+    S: IndexForwardChunked<ChunkIndex = I>,
+{
+    fn len(&self) -> usize {
+        self.store.len() - self.yielded
+    }
+
+    #[cfg(feature = "nightly")]
+    fn is_empty(&self) -> bool {
+        self.store.len() == self.yielded
+    }
+}
+
+impl<'a, I, S> FusedIterator for IterChunked<'a, I, S>
+where
+    I: Copy,
+    S: IndexForwardChunked<ChunkIndex = I>,
+{
+}
+
+/// Iterator over the chunk indexes of S, in reverse order.
+pub struct IterChunkedRev<'a, I, S> {
+    next: Option<I>,
+    yielded: usize,
+    store: &'a S,
+}
+
+impl<'a, I, S> Iterator for IterChunkedRev<'a, I, S>
+where
+    I: Copy,
+    S: IndexBackwardChunked<ChunkIndex = I>,
+{
+    type Item = I;
+
+    fn count(self) -> usize {
+        self.len()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let length = self.len();
+
+        (length, Some(length))
+    }
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let result = self.next.take()?;
+
+        self.yielded += 1;
+        self.next = self.store.next_chunk_before(result);
+
+        Some(result)
+    }
+}
+
+impl<'a, I, S> ExactSizeIterator for IterChunkedRev<'a, I, S>
+where
+    I: Copy,
+    S: IndexBackwardChunked<ChunkIndex = I>,
+{
+    fn len(&self) -> usize {
+        self.store.len() - self.yielded
+    }
+
+    #[cfg(feature = "nightly")]
+    fn is_empty(&self) -> bool {
+        self.store.len() == self.yielded
+    }
+}
+
+impl<'a, I, S> FusedIterator for IterChunkedRev<'a, I, S>
+where
+    I: Copy,
+    S: IndexBackwardChunked<ChunkIndex = I>,
+{
+}
+
+//
 //  Iterator operations: drain, erase_if, retain.
 //
 
@@ -1109,6 +1543,48 @@ where
 }
 
 impl<S> IndexOrdSet<S>
+where
+    S: IndexForward + IndexStore,
+{
+    /// Clears the set, returning all elements as an iterator.
+    pub fn drain(&mut self) -> Drain<'_, S::Index, S> {
+        Drain {
+            next: self.store.first(),
+            yielded: 0,
+            store: &mut self.store,
+        }
+    }
+
+    /// Creates an iterator which uses a closure to determine if an element should be removed.
+    ///
+    /// The elements returned by the iterator are removed from the set.
+    pub fn extract_if<F>(&mut self, pred: F) -> ExtractIf<'_, S::Index, S, F> {
+        ExtractIf {
+            pred,
+            next: self.store.first(),
+            passed: 0,
+            store: &mut self.store,
+        }
+    }
+
+    /// Retains only the elements specified by the predicate.
+    pub fn retain<F>(&mut self, mut pred: F)
+    where
+        F: FnMut(S::Index) -> bool,
+    {
+        let mut cursor = self.store.first();
+
+        while let Some(index) = cursor {
+            if !pred(index) {
+                self.store.remove(index);
+            }
+
+            cursor = self.store.next_after(index);
+        }
+    }
+}
+
+impl<S> IndexChunkedSet<S>
 where
     S: IndexForward + IndexStore,
 {
@@ -1301,7 +1777,7 @@ where
     /// Returns the indexes that are in `self`, but not `other`.
     pub fn difference<'a, OS>(&'a self, other: &'a IndexSet<OS>) -> Difference<'a, S::Index, S, OS>
     where
-        OS: IndexStore<Index = S::Index>,
+        OS: IndexView<Index = S::Index>,
     {
         Difference {
             next: self.store.first(),
@@ -1330,7 +1806,7 @@ where
     /// Performance: if a set is known to contain less indexes than the other, then this set is used as `self`.
     pub fn intersection<'a, OS>(&'a self, other: &'a IndexSet<OS>) -> Intersection<'a, S::Index, S, OS>
     where
-        OS: IndexStore<Index = S::Index>,
+        OS: IndexView<Index = S::Index>,
     {
         Intersection {
             next: self.store.first(),
@@ -1362,7 +1838,7 @@ where
     /// Returns the indexes that are in `self`, but not `other`.
     pub fn difference<'a, OS>(&'a self, other: &'a IndexOrdSet<OS>) -> Difference<'a, S::Index, S, OS>
     where
-        OS: IndexStore<Index = S::Index>,
+        OS: IndexView<Index = S::Index>,
     {
         Difference {
             next: self.store.first(),
@@ -1421,6 +1897,73 @@ where
     }
 }
 
+//  FIXME: implement more efficiently based on chunks.
+impl<S> IndexChunkedSet<S>
+where
+    S: IndexOrdered,
+{
+    /// Returns the indexes that are in `self`, but not `other`.
+    pub fn difference<'a, OS>(&'a self, other: &'a IndexChunkedSet<OS>) -> Difference<'a, S::Index, S, OS>
+    where
+        OS: IndexView<Index = S::Index>,
+    {
+        Difference {
+            next: self.store.first(),
+            passed: 0,
+            left: &self.store,
+            right: &other.store,
+        }
+    }
+
+    /// Returns the indexes that are in `self` or in `other`, but not in both.
+    ///
+    /// Takes advantage of iteration over `self` and `other` being ordered to minimize the number of operations.
+    pub fn symmetric_difference<'a, OS>(
+        &'a self,
+        other: &'a IndexChunkedSet<OS>,
+    ) -> SymmetricDifferenceOrd<'a, S::Index, S, OS>
+    where
+        OS: IndexOrdered<Index = S::Index>,
+    {
+        SymmetricDifferenceOrd {
+            next_left: self.store.first(),
+            next_right: other.store.first(),
+            left: &self.store,
+            right: &other.store,
+        }
+    }
+
+    /// Returns the indexes that are both in `self` and in `other`.
+    ///
+    /// Takes advantage of iteration over `self` and `other` being ordered to minimize the number of operations.
+    pub fn intersection<'a, OS>(&'a self, other: &'a IndexChunkedSet<OS>) -> IntersectionOrd<'a, S::Index, S, OS>
+    where
+        OS: IndexOrdered<Index = S::Index>,
+    {
+        IntersectionOrd {
+            next_left: self.store.first(),
+            next_right: other.store.first(),
+            left: &self.store,
+            right: &other.store,
+        }
+    }
+
+    /// Returns the indexes that are in either one of `self` or `other`.
+    ///
+    /// Takes advantage of iteration over `self` and `other` being ordered to minimize the number of operations.
+    pub fn union<'a, OS>(&'a self, other: &'a IndexChunkedSet<OS>) -> UnionOrd<'a, S::Index, S, OS>
+    where
+        OS: IndexOrdered<Index = S::Index>,
+    {
+        UnionOrd {
+            next_left: self.store.first(),
+            next_right: other.store.first(),
+            left: &self.store,
+            right: &other.store,
+        }
+    }
+}
+
 /// Iterator over the elements in L that are not in R.
 pub struct Difference<'a, I, L, R> {
     next: Option<I>,
@@ -1433,7 +1976,7 @@ impl<'a, I, L, R> Iterator for Difference<'a, I, L, R>
 where
     I: Copy,
     L: IndexForward<Index = I>,
-    R: IndexStore<Index = I>,
+    R: IndexView<Index = I>,
 {
     type Item = I;
 
@@ -1464,7 +2007,7 @@ impl<'a, I, L, R> FusedIterator for Difference<'a, I, L, R>
 where
     I: Copy,
     L: IndexForward<Index = I>,
-    R: IndexStore<Index = I>,
+    R: IndexView<Index = I>,
 {
 }
 
@@ -1540,7 +2083,7 @@ impl<'a, I, L, R> Iterator for Intersection<'a, I, L, R>
 where
     I: Copy,
     L: IndexForward<Index = I>,
-    R: IndexStore<Index = I>,
+    R: IndexView<Index = I>,
 {
     type Item = I;
 
@@ -1572,7 +2115,7 @@ impl<'a, I, L, R> FusedIterator for Intersection<'a, I, L, R>
 where
     I: Copy,
     L: IndexForward<Index = I>,
-    R: IndexStore<Index = I>,
+    R: IndexView<Index = I>,
 {
 }
 
@@ -1930,7 +2473,161 @@ where
     }
 }
 
-//  FIXME: implement chunk versions of the above.
+impl<S> IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked,
+{
+    /// Removes all indexes of `self` not contained in `other`.
+    pub fn bitand_assign<OS>(&mut self, other: &IndexChunkedSet<OS>)
+    where
+        S: IndexStoreChunked<SetError = Never>,
+        OS: IndexViewChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+    {
+        #[inline(always)]
+        fn apply<S, OS>(outer: S::ChunkIndex, this: &mut S, other: &OS)
+        where
+            S: IndexOrderedChunked + IndexStoreChunked,
+            OS: IndexViewChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+        {
+            let Some(chunk) = this.get_chunk(outer) else { return };
+
+            if chunk.is_empty() {
+                return;
+            }
+
+            let other = other.get_chunk(outer).unwrap_or_default();
+
+            let new = chunk & other;
+
+            if new != chunk {
+                let _ = this.set_chunk(outer, new);
+            }
+        }
+
+        let Some(mut outer) = self.store.first_chunk() else {
+            return;
+        };
+
+        loop {
+            apply(outer, &mut self.store, &other.store);
+
+            let Some(next) = self.store.next_chunk_after(outer) else {
+                return;
+            };
+
+            outer = next;
+        }
+    }
+
+    /// Inserts all indexes of `other` not contained in `self`.
+    pub fn bitor_assign<OS>(&mut self, other: &IndexChunkedSet<OS>)
+    where
+        S: IndexStoreChunked<SetError = Never>,
+        OS: IndexForwardChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+    {
+        other.iter_chunks().for_each(|outer| {
+            let Some(other) = other.get_chunk(outer) else { return };
+
+            if other.is_empty() {
+                return;
+            }
+
+            let chunk = self.store.get_chunk(outer).unwrap_or_default();
+
+            let new = chunk | other;
+
+            if new != chunk {
+                let _ = self.store.set_chunk(outer, new);
+            }
+        });
+    }
+
+    /// Removes all indexes of `other` from `self`.
+    pub fn sub_assign<OS>(&mut self, other: &IndexChunkedSet<OS>)
+    where
+        S: IndexStoreChunked<SetError = Never>,
+        OS: IndexForwardChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+    {
+        other.iter_chunks().for_each(|outer| {
+            let Some(other) = other.get_chunk(outer) else { return };
+
+            if other.is_empty() {
+                return;
+            }
+
+            let Some(chunk) = self.store.get_chunk(outer) else {
+                return;
+            };
+
+            if chunk.is_empty() {
+                return;
+            }
+
+            let new = chunk - other;
+
+            if new != chunk {
+                let _ = self.store.set_chunk(outer, new);
+            }
+        });
+    }
+
+    /// Inserts all indexes of `other` not contained in `self`, while removing all indexes of `self` also contained in
+    /// `other`.
+    pub fn bitxor_assign<OS>(&mut self, other: &IndexChunkedSet<OS>)
+    where
+        S: IndexStoreChunked<SetError = Never>,
+        OS: IndexOrderedChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+    {
+        let mut next_self = self.store.first_chunk();
+        let mut next_other = other.store.first_chunk();
+
+        loop {
+            match (next_self, next_other) {
+                (_, None) => break,
+                (None, Some(_)) => {
+                    while let Some(that) = next_other {
+                        let Some(that_chunk) = other.store.get_chunk(that) else {
+                            continue;
+                        };
+
+                        if !that_chunk.is_empty() {
+                            let _ = self.store.set_chunk(that, that_chunk);
+                        }
+
+                        next_other = other.store.next_chunk_after(that);
+                    }
+
+                    break;
+                }
+                (Some(this), Some(that)) => match this.cmp(&that) {
+                    Ordering::Equal => {
+                        let this_chunk = self.store.get_chunk(this).unwrap_or_default();
+                        let that_chunk = other.store.get_chunk(that).unwrap_or_default();
+
+                        let _ = self.store.set_chunk(this, this_chunk ^ that_chunk);
+
+                        next_self = self.store.next_chunk_after(this);
+                        next_other = other.store.next_chunk_after(that);
+                    }
+                    Ordering::Less => {
+                        next_self = self.store.next_chunk_after(this);
+                    }
+                    Ordering::Greater => {
+                        let Some(that_chunk) = other.store.get_chunk(that) else {
+                            continue;
+                        };
+
+                        if !that_chunk.is_empty() {
+                            let _ = self.store.set_chunk(that, that_chunk);
+                        }
+
+                        next_other = other.store.next_chunk_after(that);
+                    }
+                },
+            }
+        }
+    }
+}
 
 #[cfg(test)]
 mod bitwise_tests;
@@ -1942,7 +2639,7 @@ mod bitwise_tests;
 impl<S, OS> ops::BitAndAssign<IndexSet<OS>> for IndexSet<S>
 where
     S: IndexForward + IndexStore,
-    OS: IndexStore<Index = S::Index>,
+    OS: IndexView<Index = S::Index>,
 {
     fn bitand_assign(&mut self, other: IndexSet<OS>) {
         self.bitand_assign(&other);
@@ -1952,7 +2649,7 @@ where
 impl<S, OS> ops::BitAndAssign<&IndexSet<OS>> for IndexSet<S>
 where
     S: IndexForward + IndexStore,
-    OS: IndexStore<Index = S::Index>,
+    OS: IndexView<Index = S::Index>,
 {
     fn bitand_assign(&mut self, other: &IndexSet<OS>) {
         self.bitand_assign(other);
@@ -2002,7 +2699,7 @@ where
 impl<S, OS> ops::BitAnd<IndexSet<OS>> for IndexSet<S>
 where
     S: IndexForward + IndexStore,
-    OS: IndexStore<Index = S::Index>,
+    OS: IndexView<Index = S::Index>,
 {
     type Output = Self;
 
@@ -2016,7 +2713,7 @@ where
 impl<S, OS> ops::BitAnd<&IndexSet<OS>> for IndexSet<S>
 where
     S: IndexForward + IndexStore,
-    OS: IndexStore<Index = S::Index>,
+    OS: IndexView<Index = S::Index>,
 {
     type Output = Self;
 
@@ -2090,7 +2787,7 @@ where
 impl<S, OS> ops::BitAndAssign<IndexOrdSet<OS>> for IndexOrdSet<S>
 where
     S: IndexOrdered + IndexStore,
-    OS: IndexStore<Index = S::Index>,
+    OS: IndexView<Index = S::Index>,
 {
     fn bitand_assign(&mut self, other: IndexOrdSet<OS>) {
         self.bitand_assign(&other);
@@ -2100,7 +2797,7 @@ where
 impl<S, OS> ops::BitAndAssign<&IndexOrdSet<OS>> for IndexOrdSet<S>
 where
     S: IndexOrdered + IndexStore,
-    OS: IndexStore<Index = S::Index>,
+    OS: IndexView<Index = S::Index>,
 {
     fn bitand_assign(&mut self, other: &IndexOrdSet<OS>) {
         self.bitand_assign(other);
@@ -2279,4 +2976,198 @@ where
     }
 }
 
-//  FIXME: tests
+//
+//  Bitwise operators: IndexChunkedSet.
+//
+
+impl<S, OS> ops::BitAndAssign<IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexViewChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    fn bitand_assign(&mut self, other: IndexChunkedSet<OS>) {
+        self.bitand_assign(&other);
+    }
+}
+
+impl<S, OS> ops::BitAndAssign<&IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexViewChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    fn bitand_assign(&mut self, other: &IndexChunkedSet<OS>) {
+        self.bitand_assign(other);
+    }
+}
+
+impl<S, OS> ops::BitOrAssign<IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexForwardChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    fn bitor_assign(&mut self, other: IndexChunkedSet<OS>) {
+        self.bitor_assign(&other);
+    }
+}
+
+impl<S, OS> ops::BitOrAssign<&IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexForwardChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    fn bitor_assign(&mut self, other: &IndexChunkedSet<OS>) {
+        self.bitor_assign(other);
+    }
+}
+
+impl<S, OS> ops::BitXorAssign<IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexOrderedChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    fn bitxor_assign(&mut self, other: IndexChunkedSet<OS>) {
+        self.bitxor_assign(&other);
+    }
+}
+
+impl<S, OS> ops::BitXorAssign<&IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexOrderedChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    fn bitxor_assign(&mut self, other: &IndexChunkedSet<OS>) {
+        self.bitxor_assign(other);
+    }
+}
+
+impl<S, OS> ops::SubAssign<IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexForwardChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    fn sub_assign(&mut self, other: IndexChunkedSet<OS>) {
+        self.sub_assign(&other);
+    }
+}
+
+impl<S, OS> ops::SubAssign<&IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexForwardChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    fn sub_assign(&mut self, other: &IndexChunkedSet<OS>) {
+        self.sub_assign(other);
+    }
+}
+
+impl<S, OS> ops::BitAnd<IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexViewChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    type Output = Self;
+
+    fn bitand(mut self, other: IndexChunkedSet<OS>) -> Self::Output {
+        self.bitand_assign(&other);
+
+        self
+    }
+}
+
+impl<S, OS> ops::BitAnd<&IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexViewChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    type Output = Self;
+
+    fn bitand(mut self, other: &IndexChunkedSet<OS>) -> Self::Output {
+        self.bitand_assign(other);
+
+        self
+    }
+}
+
+impl<S, OS> ops::BitOr<IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexForwardChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    type Output = Self;
+
+    fn bitor(mut self, other: IndexChunkedSet<OS>) -> Self::Output {
+        self.bitor_assign(&other);
+
+        self
+    }
+}
+
+impl<S, OS> ops::BitOr<&IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexForwardChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    type Output = Self;
+
+    fn bitor(mut self, other: &IndexChunkedSet<OS>) -> Self::Output {
+        self.bitor_assign(other);
+
+        self
+    }
+}
+
+impl<S, OS> ops::Sub<IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexForwardChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    type Output = Self;
+
+    fn sub(mut self, other: IndexChunkedSet<OS>) -> Self::Output {
+        self.sub_assign(&other);
+
+        self
+    }
+}
+
+impl<S, OS> ops::Sub<&IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexForwardChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    type Output = Self;
+
+    fn sub(mut self, other: &IndexChunkedSet<OS>) -> Self::Output {
+        self.sub_assign(other);
+
+        self
+    }
+}
+
+impl<S, OS> ops::BitXor<IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexOrderedChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    type Output = Self;
+
+    fn bitxor(mut self, other: IndexChunkedSet<OS>) -> Self::Output {
+        self.bitxor_assign(&other);
+
+        self
+    }
+}
+
+impl<S, OS> ops::BitXor<&IndexChunkedSet<OS>> for IndexChunkedSet<S>
+where
+    S: IndexOrderedChunked + IndexStoreChunked<SetError = Never>,
+    OS: IndexOrderedChunked<Index = S::Index, ChunkIndex = S::ChunkIndex, Chunk = S::Chunk>,
+{
+    type Output = Self;
+
+    fn bitxor(mut self, other: &IndexChunkedSet<OS>) -> Self::Output {
+        self.bitxor_assign(other);
+
+        self
+    }
+}

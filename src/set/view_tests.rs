@@ -55,3 +55,32 @@ mod index_ord_set {
         }
     }
 } // mod index_ord_set
+
+mod index_chunked_set {
+    use crate::{
+        chunk::{ArrayChunk, UnsignedChunk},
+        set::IndexChunkedSet,
+    };
+
+    type Victim = IndexChunkedSet<ArrayChunk<UnsignedChunk<u8>, 2>>;
+
+    #[test]
+    fn contains() {
+        const EMPTY: [u16; 0] = [];
+        const SOME: [u16; 7] = [1, 2, 3, 5, 7, 11, 13];
+
+        {
+            let victim: Victim = EMPTY.into_iter().collect();
+
+            assert!(!victim.contains(0));
+            assert!(!victim.contains(1));
+        }
+
+        {
+            let victim: Victim = SOME.into_iter().collect();
+
+            assert!(!victim.contains(0));
+            assert!(victim.contains(1));
+        }
+    }
+} // mod index_chunked_set

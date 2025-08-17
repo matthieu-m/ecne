@@ -3,10 +3,11 @@
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Bound, Not, Sub, SubAssign};
 
 use crate::{
+    Never,
     chunk::IndexChunk,
     index::{
         IndexBackward, IndexBackwardChunked, IndexCollection, IndexForward, IndexForwardChunked, IndexOrdered,
-        IndexOrderedChunked, IndexStore, IndexVault, IndexView, IndexViewChunked,
+        IndexOrderedChunked, IndexStore, IndexStoreChunked, IndexVault, IndexView, IndexViewChunked,
     },
 };
 
@@ -386,6 +387,27 @@ where
 
     fn get_chunk(&self, index: Self::ChunkIndex) -> Option<Self::Chunk> {
         self.0.get(index as usize).copied()
+    }
+}
+
+/// A store of indexes.
+///
+/// #   Safety
+///
+/// -   NoPhantom: the store will only ever return indexes that have been inserted and have not been removed since.
+unsafe impl<C, const N: usize> IndexStoreChunked for ArrayChunk<C, N>
+where
+    C: IndexChunk<Index = u8>,
+{
+    type SetError = Never;
+
+    /// #   Panics
+    ///
+    /// If `index >= N`.
+    fn set_chunk(&mut self, index: Self::ChunkIndex, chunk: Self::Chunk) -> Result<(), Self::SetError> {
+        self.0[index as usize] = chunk;
+
+        Ok(())
     }
 }
 
