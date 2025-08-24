@@ -8,23 +8,33 @@
 
 mod index_backward;
 mod index_backward_chunked;
+mod index_backward_chunked_not;
+mod index_backward_not;
 mod index_collection;
 mod index_forward;
 mod index_forward_chunked;
+mod index_forward_chunked_not;
+mod index_forward_not;
 mod index_store;
 mod index_view;
 mod index_view_chunked;
+mod index_view_not;
 
 use crate::index::IndexVault;
 
 pub use index_backward::TestIndexBackward;
 pub use index_backward_chunked::TestIndexBackwardChunked;
+pub use index_backward_chunked_not::TestIndexBackwardChunkedNot;
+pub use index_backward_not::TestIndexBackwardNot;
 pub use index_collection::TestIndexCollection;
 pub use index_forward::TestIndexForward;
 pub use index_forward_chunked::TestIndexForwardChunked;
+pub use index_forward_chunked_not::TestIndexForwardChunkedNot;
+pub use index_forward_not::TestIndexForwardNot;
 pub use index_store::TestIndexStore;
 pub use index_view::TestIndexView;
 pub use index_view_chunked::TestIndexViewChunked;
+pub use index_view_not::TestIndexViewNot;
 
 /// A trait to generate a view.
 pub trait IndexTester {
@@ -53,4 +63,15 @@ pub trait IndexTester {
     /// This operation should preserve the _order_, that is, for any a, b such that a < b, then `Self::index(a)` <
     /// `Self::index(b)`.
     fn index(i: u8) -> Self::Index;
+}
+
+/// A trait to generate a not view.
+pub trait IndexTesterNot: IndexTester {
+    /// Returns the capacity.
+    fn capacity() -> usize;
+
+    /// Creates a victim containing all BUT the given indexes.
+    ///
+    /// Equivalent to `let victim: Victim = indexes.iter().map(|i| Self::map(*i)).collect()`.
+    fn victim_not(indexes: &[u8]) -> Self::Victim;
 }

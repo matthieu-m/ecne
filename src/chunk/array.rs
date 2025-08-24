@@ -9,6 +9,10 @@ use crate::{
         IndexBackward, IndexBackwardChunked, IndexCollection, IndexForward, IndexForwardChunked, IndexOrdered,
         IndexOrderedChunked, IndexStore, IndexStoreChunked, IndexVault, IndexView, IndexViewChunked,
     },
+    not::{
+        IndexBackwardChunkedNot, IndexBackwardNot, IndexForwardChunkedNot, IndexForwardNot, IndexOrderedChunkedNot,
+        IndexOrderedNot, IndexViewNot,
+    },
 };
 
 /// Simple implementation of `IndexChunk` for arrays of chunks.
@@ -22,6 +26,11 @@ where
     /// Creates a new, empty, instance.
     pub fn new() -> Self {
         Self([C::new(); N])
+    }
+
+    /// Creates a new, full, instance.
+    pub fn full() -> Self {
+        Self([!C::new(); N])
     }
 }
 
@@ -200,6 +209,19 @@ where
     }
 }
 
+//  Safety:
+//
+//  -   NoPhantom: the store will only ever return that it contains an index if the index was inserted, and was not
+//      removed since.
+unsafe impl<C, const N: usize> IndexViewNot for ArrayChunk<C, N>
+where
+    C: IndexChunk<Index = u8>,
+{
+    fn len_not(&self) -> usize {
+        C::BITS as usize * N - self.len()
+    }
+}
+
 impl<C, const N: usize> IndexCollection for ArrayChunk<C, N>
 where
     C: IndexChunk<Index = u8>,
@@ -307,6 +329,46 @@ where
 
 //  Safety:
 //
+//  -   NoDuplicate: the view will never return the same index a second time.
+//  -   NoPhantom: the view will only ever return that it contains an index if the index was inserted, and was not
+//      removed since.
+//  -   NoTheft: the view will return all indexes.
+unsafe impl<C, const N: usize> IndexForwardNot for ArrayChunk<C, N>
+where
+    C: IndexChunk<Index = u8> + IndexForwardNot,
+{
+    fn first_not(&self) -> Option<Self::Index> {
+        let (outer, inner) = self
+            .0
+            .iter()
+            .enumerate()
+            .find_map(|(i, c)| c.first_not().map(|r| (i, r)))?;
+
+        Some(Self::fuse(outer as u16, inner))
+    }
+
+    fn next_after_not(&self, current: Self::Index) -> Option<Self::Index> {
+        let (outer, inner) = Self::split(current);
+
+        let outer: usize = outer.into();
+
+        if let Some(inner) = self.0.get(outer).and_then(|chunk| chunk.next_after_not(inner)) {
+            return Some(Self::fuse(outer as u16, inner));
+        }
+
+        let (outer, inner) = self
+            .0
+            .iter()
+            .enumerate()
+            .skip(outer + 1)
+            .find_map(|(i, c)| c.first_not().map(|r| (i, r)))?;
+
+        Some(Self::fuse(outer as u16, inner))
+    }
+}
+
+//  Safety:
+//
 //  -   Reverse: the view will return indexes in the exact opposite sequence than `IndexForward` does.
 unsafe impl<C, const N: usize> IndexBackward for ArrayChunk<C, N>
 where
@@ -348,8 +410,57 @@ where
 
 //  Safety:
 //
+//  -   Reverse: the view will return indexes in the exact opposite sequence than `IndexForward` does.
+unsafe impl<C, const N: usize> IndexBackwardNot for ArrayChunk<C, N>
+where
+    C: IndexChunk<Index = u8> + IndexBackwardNot,
+{
+    fn last_not(&self) -> Option<Self::Index> {
+        let (outer, inner) = self
+            .0
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(i, c)| c.last_not().map(|r| (i, r)))?;
+
+        Some(Self::fuse(outer as u16, inner))
+    }
+
+    fn next_before_not(&self, current: Self::Index) -> Option<Self::Index> {
+        let (outer, inner) = Self::split(current);
+
+        let outer: usize = outer.into();
+
+        if let Some(inner) = self.0.get(outer).and_then(|chunk| chunk.next_before_not(inner)) {
+            return Some(Self::fuse(outer as u16, inner));
+        }
+
+        let limit = outer.min(self.0.len());
+
+        let (outer, inner) = self
+            .0
+            .get(..limit)?
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(i, c)| c.last_not().map(|r| (i, r)))?;
+
+        Some(Self::fuse(outer as u16, inner))
+    }
+}
+
+//  Safety:
+//
 //  -   Ordered: the `IndexForward` implementation will return indexes in strictly increasing order.
-unsafe impl<C, const N: usize> IndexOrdered for ArrayChunk<C, N> where C: IndexChunk<Index = u8> + IndexForward {}
+unsafe impl<C, const N: usize> IndexOrdered for ArrayChunk<C, N> where C: IndexChunk<Index = u8> + IndexOrdered {}
+
+//  Safety:
+//
+//  -   Ordered: the `IndexForward` implementation will return indexes in strictly increasing order.
+unsafe impl<C, const N: usize> IndexOrderedNot for ArrayChunk<C, N> where
+    C: IndexChunk<Index = u8> + IndexForwardNot + IndexOrdered
+{
+}
 
 //  Safety:
 //
@@ -432,6 +543,27 @@ where
     }
 }
 
+//  #   Safety
+//
+//  -   NoDuplicate: the view will never return the same index a second time.
+//  -   NoPhantom: the view will only ever return that it contains an index if the index was inserted, and was not
+//      removed since.
+//  -   NoTheft: the view will return all indexes.
+unsafe impl<C, const N: usize> IndexForwardChunkedNot for ArrayChunk<C, N>
+where
+    C: IndexChunk<Index = u8>,
+{
+    fn first_chunk_not(&self) -> Option<Self::ChunkIndex> {
+        (N > 0).then_some(0)
+    }
+
+    fn next_chunk_after_not(&self, current: Self::ChunkIndex) -> Option<Self::ChunkIndex> {
+        let i: usize = current.into();
+
+        (i + 1 < N).then(|| current + 1)
+    }
+}
+
 //  Safety:
 //
 //  -   Reverse: the view will return indexes in the exact opposite sequence than `IndexForwardChunked` does.
@@ -448,14 +580,38 @@ where
     }
 }
 
+//  Safety:
+//
+//  -   Reverse: the view will return indexes in the exact opposite sequence than `IndexForwardChunked` does.
+unsafe impl<C, const N: usize> IndexBackwardChunkedNot for ArrayChunk<C, N>
+where
+    C: IndexChunk<Index = u8>,
+{
+    fn last_chunk_not(&self) -> Option<Self::ChunkIndex> {
+        (N > 0).then(|| (N - 1) as u16)
+    }
+
+    fn next_chunk_before_not(&self, current: Self::ChunkIndex) -> Option<Self::ChunkIndex> {
+        (current > 0).then(|| current - 1)
+    }
+}
+
 //  #   Safety
 //
 //  -   Ordered: the view will return indexes in strictly increasing order.
 unsafe impl<C, const N: usize> IndexOrderedChunked for ArrayChunk<C, N> where C: IndexChunk<Index = u8> {}
 
+//  #   Safety
+//
+//  -   Ordered: the view will return indexes in strictly increasing order.
+unsafe impl<C, const N: usize> IndexOrderedChunkedNot for ArrayChunk<C, N> where C: IndexChunk<Index = u8> {}
+
 #[cfg(test)]
 mod tests {
-    use crate::{chunk::UnsignedChunk, test::IndexTester};
+    use crate::{
+        chunk::UnsignedChunk,
+        test::{IndexTester, IndexTesterNot},
+    };
 
     use super::*;
 
@@ -484,6 +640,22 @@ mod tests {
         }
     }
 
+    impl IndexTesterNot for Tester {
+        fn capacity() -> usize {
+            Self::upper_bound() as usize + 1
+        }
+
+        fn victim_not(indexes: &[u8]) -> Self::Victim {
+            let mut array: Self::Victim = ArrayChunk::full();
+
+            for &index in indexes {
+                array.remove(index.into());
+            }
+
+            array
+        }
+    }
+
     crate::test_index_view!(Tester);
     crate::test_index_collection!(Tester);
     crate::test_index_store!(Tester);
@@ -492,4 +664,10 @@ mod tests {
     crate::test_index_view_chunked!(Tester);
     crate::test_index_forward_chunked!(Tester);
     crate::test_index_backward_chunked!(Tester);
+
+    crate::test_index_view_not!(Tester);
+    crate::test_index_forward_not!(Tester);
+    crate::test_index_backward_not!(Tester);
+    crate::test_index_forward_chunked_not!(Tester);
+    crate::test_index_backward_chunked_not!(Tester);
 } // mod tests

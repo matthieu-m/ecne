@@ -6,6 +6,7 @@ use crate::{
     Never,
     chunk::IndexChunk,
     index::{IndexBackward, IndexCollection, IndexForward, IndexOrdered, IndexStore, IndexVault, IndexView},
+    not::{IndexBackwardNot, IndexForwardNot, IndexOrderedNot, IndexViewNot},
 };
 
 /// Simple implementation of `IndexChunk` for integrals.
@@ -134,6 +135,16 @@ macro_rules! impl_indexes_chunk_for_chunk {
             }
         }
 
+        //  #   Safety
+        //
+        //  -   NoPhantom: the store WILL only ever return that it contains an index if the index was inserted, and was
+        //      not removed since.
+        unsafe impl IndexViewNot for UnsignedChunk<$u> {
+            fn len_not(&self) -> usize {
+                $u::BITS as usize - self.len()
+            }
+        }
+
         impl IndexCollection for UnsignedChunk<$u> {
             fn span() -> (Bound<Self::Index>, Bound<Self::Index>) {
                 (Bound::Included(0), Bound::Excluded($u::BITS as u8))
@@ -226,6 +237,34 @@ macro_rules! impl_indexes_chunk_for_chunk {
 
         //  #   Safety
         //
+        //  -   NoDuplicate: the view WILL never return the same index a second time.
+        //  -   NoPhantom: the view WILL only ever return that it contains an index if the index was inserted, and was
+        //      not removed since.
+        //  -   NoTheft: the view WILL return all indexes.
+        unsafe impl IndexForwardNot for UnsignedChunk<$u> {
+            fn first_not(&self) -> Option<Self::Index> {
+                let ones = self.0.trailing_ones();
+
+                (ones < $u::BITS).then_some(ones as u8)
+            }
+
+            fn next_after_not(&self, index: Self::Index) -> Option<Self::Index> {
+                let index: u32 = index.into();
+
+                let next_index = index + 1;
+
+                if next_index == $u::BITS {
+                    return None;
+                }
+
+                let masked = self.0 | ((1 << next_index) - 1);
+
+                Self(masked).first_not()
+            }
+        }
+
+        //  #   Safety
+        //
         //  -   Reverse: the view WILL return indexes in the exact opposite sequence than `IndexForward` does.
         unsafe impl IndexBackward for UnsignedChunk<$u> {
             fn last(&self) -> Option<Self::Index> {
@@ -245,8 +284,32 @@ macro_rules! impl_indexes_chunk_for_chunk {
 
         //  #   Safety
         //
+        //  -   Reverse: the view WILL return indexes in the exact opposite sequence than `IndexForward` does.
+        unsafe impl IndexBackwardNot for UnsignedChunk<$u> {
+            fn last_not(&self) -> Option<Self::Index> {
+                let ones = self.0.leading_ones();
+
+                $u::BITS.checked_sub(ones + 1).map(|n| n as u8)
+            }
+
+            fn next_before_not(&self, index: Self::Index) -> Option<Self::Index> {
+                let index: u32 = index.into();
+
+                let masked = self.0 | !((1 << index) - 1);
+
+                Self(masked).last_not()
+            }
+        }
+
+        //  #   Safety
+        //
         //  -   Ordered: the `IndexForward` implementation WILL return indexes in strictly increasing order.
         unsafe impl IndexOrdered for UnsignedChunk<$u> {}
+
+        //  #   Safety
+        //
+        //  -   Ordered: the `IndexForward` implementation WILL return indexes in strictly increasing order.
+        unsafe impl IndexOrderedNot for UnsignedChunk<$u> {}
     )* };
 }
 
@@ -274,11 +337,25 @@ mod tests {
                     fn index(i: u8) -> Self::Index { i }
                 }
 
+                impl crate::test::IndexTesterNot for Tester {
+                    fn capacity() -> usize {
+                        $u::BITS as usize
+                    }
+
+                    fn victim_not(indexes: &[u8]) -> Self::Victim {
+                        UnsignedChunk(indexes.iter().fold(!0, |acc, i| acc & !(1 << (*i as u32))))
+                    }
+                }
+
                 crate::test_index_view!(Tester);
                 crate::test_index_collection!(Tester);
                 crate::test_index_store!(Tester);
                 crate::test_index_forward!(Tester);
                 crate::test_index_backward!(Tester);
+
+                crate::test_index_view_not!(Tester);
+                crate::test_index_forward_not!(Tester);
+                crate::test_index_backward_not!(Tester);
             }
        )* };
     }

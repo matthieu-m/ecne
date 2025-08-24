@@ -23,6 +23,7 @@ extern crate alloc;
 
 pub mod chunk;
 pub mod index;
+pub mod not;
 pub mod set;
 pub mod vault;
 
