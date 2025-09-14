@@ -18,6 +18,7 @@ use crate::{
         IndexBackward, IndexBackwardChunked, IndexCollection, IndexForward, IndexForwardChunked, IndexOrdered,
         IndexOrderedChunked, IndexStore, IndexStoreChunked, IndexView, IndexViewChunked,
     },
+    not::NotView,
 };
 
 /// A set of indexes.
@@ -275,6 +276,49 @@ impl<S> IndexChunkedSet<S> {
         self.store
     }
 }
+
+//
+//  Negation Operations.
+//
+
+impl<S> IndexSet<S> {
+    /// Returns a negated reference.
+    pub fn as_not(&self) -> NotView<&S> {
+        NotView::new(&self.store)
+    }
+
+    /// Returns a negated view.
+    pub fn into_not(self) -> NotView<S> {
+        NotView::new(self.store)
+    }
+}
+
+impl<S> IndexOrdSet<S> {
+    /// Returns a negated reference.
+    pub fn as_not(&self) -> NotView<&S> {
+        NotView::new(&self.store)
+    }
+
+    /// Returns a negated view.
+    pub fn into_not(self) -> NotView<S> {
+        NotView::new(self.store)
+    }
+}
+
+impl<S> IndexChunkedSet<S> {
+    /// Returns a negated reference.
+    pub fn as_not(&self) -> NotView<&S> {
+        NotView::new(&self.store)
+    }
+
+    /// Returns a negated view.
+    pub fn into_not(self) -> NotView<S> {
+        NotView::new(self.store)
+    }
+}
+
+#[cfg(test)]
+mod not_tests;
 
 //
 //  View Operations.

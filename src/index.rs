@@ -292,6 +292,388 @@ pub unsafe trait IndexBackwardChunked: IndexViewChunked {
 /// -   Ordered: the `IndexForwardChunked` implementation SHALL return indexes in strictly increasing order.
 pub unsafe trait IndexOrderedChunked: IndexForwardChunked {}
 
+//
+//  Implementations for references.
+//
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexView for &T
+where
+    T: IndexView,
+{
+    type Index = T::Index;
+
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        (**self).is_empty()
+    }
+
+    #[inline(always)]
+    fn len(&self) -> usize {
+        (**self).len()
+    }
+
+    #[inline(always)]
+    fn contains(&self, index: Self::Index) -> bool {
+        (**self).contains(index)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexView for &mut T
+where
+    T: IndexView,
+{
+    type Index = T::Index;
+
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        (**self).is_empty()
+    }
+
+    #[inline(always)]
+    fn len(&self) -> usize {
+        (**self).len()
+    }
+
+    #[inline(always)]
+    fn contains(&self, index: Self::Index) -> bool {
+        (**self).contains(index)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexStore for &mut T
+where
+    T: IndexStore,
+{
+    type InsertionError = T::InsertionError;
+
+    #[inline(always)]
+    fn clear(&mut self) {
+        (**self).clear();
+    }
+
+    #[inline(always)]
+    fn insert(&mut self, index: Self::Index) -> Result<bool, Self::InsertionError> {
+        (**self).insert(index)
+    }
+
+    #[inline(always)]
+    fn remove(&mut self, index: Self::Index) -> bool {
+        (**self).remove(index)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexVault for &T where T: IndexVault {}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexVault for &mut T where T: IndexVault {}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexForward for &T
+where
+    T: IndexForward,
+{
+    #[inline(always)]
+    fn first(&self) -> Option<Self::Index> {
+        (**self).first()
+    }
+
+    #[inline(always)]
+    fn next_after(&self, current: Self::Index) -> Option<Self::Index> {
+        (**self).next_after(current)
+    }
+
+    #[inline(always)]
+    fn nth_after(&self, n: usize, current: Self::Index) -> Result<Self::Index, NonZeroUsize> {
+        (**self).nth_after(n, current)
+    }
+
+    #[cfg(feature = "nightly")]
+    #[inline(always)]
+    fn try_fold_after<B, F, R>(&self, current: Self::Index, accumulator: B, f: F) -> R
+    where
+        F: FnMut(B, Self::Index) -> R,
+        R: Try<Output = B>,
+    {
+        (**self).try_fold_after(current, accumulator, f)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexForward for &mut T
+where
+    T: IndexForward,
+{
+    #[inline(always)]
+    fn first(&self) -> Option<Self::Index> {
+        (**self).first()
+    }
+
+    #[inline(always)]
+    fn next_after(&self, current: Self::Index) -> Option<Self::Index> {
+        (**self).next_after(current)
+    }
+
+    #[inline(always)]
+    fn nth_after(&self, n: usize, current: Self::Index) -> Result<Self::Index, NonZeroUsize> {
+        (**self).nth_after(n, current)
+    }
+
+    #[cfg(feature = "nightly")]
+    #[inline(always)]
+    fn try_fold_after<B, F, R>(&self, current: Self::Index, accumulator: B, f: F) -> R
+    where
+        F: FnMut(B, Self::Index) -> R,
+        R: Try<Output = B>,
+    {
+        (**self).try_fold_after(current, accumulator, f)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexBackward for &T
+where
+    T: IndexBackward,
+{
+    #[inline(always)]
+    fn last(&self) -> Option<Self::Index> {
+        (**self).last()
+    }
+
+    #[inline(always)]
+    fn next_before(&self, current: Self::Index) -> Option<Self::Index> {
+        (**self).next_before(current)
+    }
+
+    #[inline(always)]
+    fn nth_before(&self, n: usize, current: Self::Index) -> Result<Self::Index, NonZeroUsize> {
+        (**self).nth_before(n, current)
+    }
+
+    #[cfg(feature = "nightly")]
+    #[inline(always)]
+    fn try_fold_before<B, F, R>(&self, current: Self::Index, accumulator: B, f: F) -> R
+    where
+        F: FnMut(B, Self::Index) -> R,
+        R: Try<Output = B>,
+    {
+        (**self).try_fold_before(current, accumulator, f)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexBackward for &mut T
+where
+    T: IndexBackward,
+{
+    #[inline(always)]
+    fn last(&self) -> Option<Self::Index> {
+        (**self).last()
+    }
+
+    #[inline(always)]
+    fn next_before(&self, current: Self::Index) -> Option<Self::Index> {
+        (**self).next_before(current)
+    }
+
+    #[inline(always)]
+    fn nth_before(&self, n: usize, current: Self::Index) -> Result<Self::Index, NonZeroUsize> {
+        (**self).nth_before(n, current)
+    }
+
+    #[cfg(feature = "nightly")]
+    #[inline(always)]
+    fn try_fold_before<B, F, R>(&self, current: Self::Index, accumulator: B, f: F) -> R
+    where
+        F: FnMut(B, Self::Index) -> R,
+        R: Try<Output = B>,
+    {
+        (**self).try_fold_before(current, accumulator, f)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexOrdered for &T where T: IndexOrdered {}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexOrdered for &mut T where T: IndexOrdered {}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexViewChunked for &T
+where
+    T: IndexViewChunked,
+{
+    type ChunkIndex = T::ChunkIndex;
+
+    type Chunk = T::Chunk;
+
+    #[inline(always)]
+    fn fuse(outer: Self::ChunkIndex, inner: <Self::Chunk as IndexView>::Index) -> Self::Index {
+        T::fuse(outer, inner)
+    }
+
+    #[inline(always)]
+    fn split(index: Self::Index) -> (Self::ChunkIndex, <Self::Chunk as IndexView>::Index) {
+        T::split(index)
+    }
+
+    #[inline(always)]
+    fn get_chunk(&self, index: Self::ChunkIndex) -> Option<Self::Chunk> {
+        (**self).get_chunk(index)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexViewChunked for &mut T
+where
+    T: IndexViewChunked,
+{
+    type ChunkIndex = T::ChunkIndex;
+
+    type Chunk = T::Chunk;
+
+    #[inline(always)]
+    fn fuse(outer: Self::ChunkIndex, inner: <Self::Chunk as IndexView>::Index) -> Self::Index {
+        T::fuse(outer, inner)
+    }
+
+    #[inline(always)]
+    fn split(index: Self::Index) -> (Self::ChunkIndex, <Self::Chunk as IndexView>::Index) {
+        T::split(index)
+    }
+
+    #[inline(always)]
+    fn get_chunk(&self, index: Self::ChunkIndex) -> Option<Self::Chunk> {
+        (**self).get_chunk(index)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexStoreChunked for &mut T
+where
+    T: IndexStoreChunked,
+{
+    type SetError = T::SetError;
+
+    #[inline(always)]
+    fn set_chunk(&mut self, index: Self::ChunkIndex, chunk: Self::Chunk) -> Result<(), Self::SetError> {
+        (**self).set_chunk(index, chunk)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexForwardChunked for &T
+where
+    T: IndexForwardChunked,
+{
+    #[inline(always)]
+    fn first_chunk(&self) -> Option<Self::ChunkIndex> {
+        (**self).first_chunk()
+    }
+
+    #[inline(always)]
+    fn next_chunk_after(&self, current: Self::ChunkIndex) -> Option<Self::ChunkIndex> {
+        (**self).next_chunk_after(current)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexForwardChunked for &mut T
+where
+    T: IndexForwardChunked,
+{
+    #[inline(always)]
+    fn first_chunk(&self) -> Option<Self::ChunkIndex> {
+        (**self).first_chunk()
+    }
+
+    #[inline(always)]
+    fn next_chunk_after(&self, current: Self::ChunkIndex) -> Option<Self::ChunkIndex> {
+        (**self).next_chunk_after(current)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexBackwardChunked for &T
+where
+    T: IndexBackwardChunked,
+{
+    #[inline(always)]
+    fn last_chunk(&self) -> Option<Self::ChunkIndex> {
+        (**self).last_chunk()
+    }
+
+    #[inline(always)]
+    fn next_chunk_before(&self, index: Self::ChunkIndex) -> Option<Self::ChunkIndex> {
+        (**self).next_chunk_before(index)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexBackwardChunked for &mut T
+where
+    T: IndexBackwardChunked,
+{
+    #[inline(always)]
+    fn last_chunk(&self) -> Option<Self::ChunkIndex> {
+        (**self).last_chunk()
+    }
+
+    #[inline(always)]
+    fn next_chunk_before(&self, index: Self::ChunkIndex) -> Option<Self::ChunkIndex> {
+        (**self).next_chunk_before(index)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexOrderedChunked for &T where T: IndexOrderedChunked {}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexOrderedChunked for &mut T where T: IndexOrderedChunked {}
+
 #[cfg(test)]
 mod tests {
     use core::ops::Bound;

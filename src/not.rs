@@ -237,6 +237,260 @@ pub unsafe trait IndexBackwardChunkedNot: IndexBackwardChunked + IndexViewNot {
 pub unsafe trait IndexOrderedChunkedNot: IndexForwardChunkedNot + IndexOrderedChunked {}
 
 //
+//  Implementations for references
+//
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexViewNot for &T
+where
+    T: IndexViewNot,
+{
+    #[inline(always)]
+    fn len_not(&self) -> usize {
+        (**self).len_not()
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexViewNot for &mut T
+where
+    T: IndexViewNot,
+{
+    #[inline(always)]
+    fn len_not(&self) -> usize {
+        (**self).len_not()
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexForwardNot for &T
+where
+    T: IndexForwardNot,
+{
+    #[inline(always)]
+    fn first_not(&self) -> Option<Self::Index> {
+        (**self).first_not()
+    }
+
+    #[inline(always)]
+    fn next_after_not(&self, current: Self::Index) -> Option<Self::Index> {
+        (**self).next_after_not(current)
+    }
+
+    #[inline(always)]
+    fn nth_after_not(&self, n: usize, current: Self::Index) -> Result<Self::Index, NonZeroUsize> {
+        (**self).nth_after_not(n, current)
+    }
+
+    #[cfg(feature = "nightly")]
+    #[inline(always)]
+    fn try_fold_after_not<B, F, R>(&self, current: Self::Index, accumulator: B, f: F) -> R
+    where
+        F: FnMut(B, Self::Index) -> R,
+        R: Try<Output = B>,
+    {
+        (**self).try_fold_after_not(current, accumulator, f)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexForwardNot for &mut T
+where
+    T: IndexForwardNot,
+{
+    #[inline(always)]
+    fn first_not(&self) -> Option<Self::Index> {
+        (**self).first_not()
+    }
+
+    #[inline(always)]
+    fn next_after_not(&self, current: Self::Index) -> Option<Self::Index> {
+        (**self).next_after_not(current)
+    }
+
+    #[inline(always)]
+    fn nth_after_not(&self, n: usize, current: Self::Index) -> Result<Self::Index, NonZeroUsize> {
+        (**self).nth_after_not(n, current)
+    }
+
+    #[cfg(feature = "nightly")]
+    #[inline(always)]
+    fn try_fold_after_not<B, F, R>(&self, current: Self::Index, accumulator: B, f: F) -> R
+    where
+        F: FnMut(B, Self::Index) -> R,
+        R: Try<Output = B>,
+    {
+        (**self).try_fold_after_not(current, accumulator, f)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexBackwardNot for &T
+where
+    T: IndexBackwardNot,
+{
+    #[inline(always)]
+    fn last_not(&self) -> Option<Self::Index> {
+        (**self).last_not()
+    }
+
+    #[inline(always)]
+    fn next_before_not(&self, current: Self::Index) -> Option<Self::Index> {
+        (**self).next_before_not(current)
+    }
+
+    #[inline(always)]
+    fn nth_before_not(&self, n: usize, current: Self::Index) -> Result<Self::Index, NonZeroUsize> {
+        (**self).nth_before_not(n, current)
+    }
+
+    #[cfg(feature = "nightly")]
+    #[inline(always)]
+    fn try_fold_before_not<B, F, R>(&self, current: Self::Index, accumulator: B, f: F) -> R
+    where
+        F: FnMut(B, Self::Index) -> R,
+        R: Try<Output = B>,
+    {
+        (**self).try_fold_before_not(current, accumulator, f)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexBackwardNot for &mut T
+where
+    T: IndexBackwardNot,
+{
+    #[inline(always)]
+    fn last_not(&self) -> Option<Self::Index> {
+        (**self).last_not()
+    }
+
+    #[inline(always)]
+    fn next_before_not(&self, current: Self::Index) -> Option<Self::Index> {
+        (**self).next_before_not(current)
+    }
+
+    #[inline(always)]
+    fn nth_before_not(&self, n: usize, current: Self::Index) -> Result<Self::Index, NonZeroUsize> {
+        (**self).nth_before_not(n, current)
+    }
+
+    #[cfg(feature = "nightly")]
+    #[inline(always)]
+    fn try_fold_before_not<B, F, R>(&self, current: Self::Index, accumulator: B, f: F) -> R
+    where
+        F: FnMut(B, Self::Index) -> R,
+        R: Try<Output = B>,
+    {
+        (**self).try_fold_before_not(current, accumulator, f)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexOrderedNot for &T where T: IndexOrderedNot {}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexOrderedNot for &mut T where T: IndexOrderedNot {}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexForwardChunkedNot for &T
+where
+    T: IndexForwardChunkedNot,
+{
+    #[inline(always)]
+    fn first_chunk_not(&self) -> Option<Self::ChunkIndex> {
+        (**self).first_chunk_not()
+    }
+
+    #[inline(always)]
+    fn next_chunk_after_not(&self, current: Self::ChunkIndex) -> Option<Self::ChunkIndex> {
+        (**self).next_chunk_after_not(current)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexForwardChunkedNot for &mut T
+where
+    T: IndexForwardChunkedNot,
+{
+    #[inline(always)]
+    fn first_chunk_not(&self) -> Option<Self::ChunkIndex> {
+        (**self).first_chunk_not()
+    }
+
+    #[inline(always)]
+    fn next_chunk_after_not(&self, current: Self::ChunkIndex) -> Option<Self::ChunkIndex> {
+        (**self).next_chunk_after_not(current)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexBackwardChunkedNot for &T
+where
+    T: IndexBackwardChunkedNot,
+{
+    #[inline(always)]
+    fn last_chunk_not(&self) -> Option<Self::ChunkIndex> {
+        (**self).last_chunk_not()
+    }
+
+    #[inline(always)]
+    fn next_chunk_before_not(&self, index: Self::ChunkIndex) -> Option<Self::ChunkIndex> {
+        (**self).next_chunk_before_not(index)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexBackwardChunkedNot for &mut T
+where
+    T: IndexBackwardChunkedNot,
+{
+    #[inline(always)]
+    fn last_chunk_not(&self) -> Option<Self::ChunkIndex> {
+        (**self).last_chunk_not()
+    }
+
+    #[inline(always)]
+    fn next_chunk_before_not(&self, index: Self::ChunkIndex) -> Option<Self::ChunkIndex> {
+        (**self).next_chunk_before_not(index)
+    }
+}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexOrderedChunkedNot for &T where T: IndexOrderedChunkedNot {}
+
+//  #   Safety
+//
+//  -   As per T.
+unsafe impl<T> IndexOrderedChunkedNot for &mut T where T: IndexOrderedChunkedNot {}
+
+//
 //  Index trait implementations
 //
 
