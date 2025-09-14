@@ -13,6 +13,7 @@
 #![cfg_attr(feature = "nightly", feature(exact_size_is_empty))]
 #![cfg_attr(feature = "nightly", feature(extend_one))]
 #![cfg_attr(feature = "nightly", feature(iter_advance_by))]
+#![cfg_attr(feature = "nightly", feature(likely_unlikely))]
 #![cfg_attr(feature = "nightly", feature(never_type))]
 #![cfg_attr(feature = "nightly", feature(try_trait_v2))]
 //  Lints.

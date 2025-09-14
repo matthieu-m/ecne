@@ -501,11 +501,9 @@ where
     }
 }
 
-/// A store of indexes.
-///
-/// #   Safety
-///
-/// -   NoPhantom: the store will only ever return indexes that have been inserted and have not been removed since.
+//  #   Safety
+//
+//  -   NoPhantom: the store will only ever return indexes that have been inserted and have not been removed since.
 unsafe impl<C, const N: usize> IndexStoreChunked for ArrayChunk<C, N>
 where
     C: IndexChunk<Index = u8>,
@@ -553,14 +551,14 @@ unsafe impl<C, const N: usize> IndexForwardChunkedNot for ArrayChunk<C, N>
 where
     C: IndexChunk<Index = u8>,
 {
+    #[inline(always)]
     fn first_chunk_not(&self) -> Option<Self::ChunkIndex> {
-        (N > 0).then_some(0)
+        self.first_chunk()
     }
 
+    #[inline(always)]
     fn next_chunk_after_not(&self, current: Self::ChunkIndex) -> Option<Self::ChunkIndex> {
-        let i: usize = current.into();
-
-        (i + 1 < N).then(|| current + 1)
+        self.next_chunk_after(current)
     }
 }
 
@@ -587,12 +585,14 @@ unsafe impl<C, const N: usize> IndexBackwardChunkedNot for ArrayChunk<C, N>
 where
     C: IndexChunk<Index = u8>,
 {
+    #[inline(always)]
     fn last_chunk_not(&self) -> Option<Self::ChunkIndex> {
-        (N > 0).then(|| (N - 1) as u16)
+        self.last_chunk()
     }
 
+    #[inline(always)]
     fn next_chunk_before_not(&self, current: Self::ChunkIndex) -> Option<Self::ChunkIndex> {
-        (current > 0).then(|| current - 1)
+        self.next_chunk_before(current)
     }
 }
 
